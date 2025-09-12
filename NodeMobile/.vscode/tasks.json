@@ -1,0 +1,31 @@
+// {
+// 	"version": "2.0.0",
+// 	"tasks": [
+// 		{
+// 			"type": "npm",
+// 			"script": "android",
+// 			"problemMatcher": [],
+// 			"label": "npm: android",
+// 			"detail": "react-native run-android",
+// 			"group": {
+// 				"kind": "build",
+// 				"isDefault": true
+// 			}
+// 		}
+// 	]
+// }
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Android",
+      "type": "shell",
+      "command": "/opt/android-sdk/emulator/emulator @Pixel_API_30 -gpu swiftshader_indirect -no-accel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

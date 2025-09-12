@@ -1,0 +1,8 @@
+{
+  "react-native-tools.androidEmulatorName": "Pixel_API_30",
+  "react-native-tools.androidEmulatorFlags": [
+    "-gpu",
+    "swiftshader_indirect", 
+    "-no-accel"
+  ]
+}
