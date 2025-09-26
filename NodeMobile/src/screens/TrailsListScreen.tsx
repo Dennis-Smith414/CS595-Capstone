@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { API_BASE, fetchTrailList } from "../lib/api";
 
+
+
 type TrailRow = {
   id: number | string;
   slug?: string;
@@ -17,6 +19,8 @@ type TrailRow = {
   points_n?: number | null;
   updated_at?: string;
 };
+
+
 
 export default function TrailsListScreen({ navigation }: { navigation: any }) {
   const [items, setItems] = useState<TrailRow[]>([]);
