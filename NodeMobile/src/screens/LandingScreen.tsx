@@ -16,7 +16,7 @@ export default function LandingScreen({ navigation }: any) {
       <Image
         source={require("../assets/images/OCLogoLight.png")}
         style={baseStyles.logo}
-        resizeMode="contain" // 👈 scale to fit, no cropping
+        resizeMode="contain"
       />
 
       {/* Buttons */}
