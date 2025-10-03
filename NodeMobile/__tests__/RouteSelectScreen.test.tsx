@@ -1,7 +1,9 @@
 // __tests__/RouteSelectScreen.test.tsx
 import React from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react-native";
-import RouteSelectScreen from "../features/routes/screens/RouteSelectScreen";
+
+import RouteSelectScreen from "../src/features/routes/screens/RouteSelectScreen";
+
 import { RouteSelectionProvider } from "../src/context/RouteSelectionContext";
 import * as api from "../src/lib/api"; // <-- import the real module to spy on
 

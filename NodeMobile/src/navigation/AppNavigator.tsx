@@ -14,7 +14,9 @@ import LandingScreen from "../screens/LandingScreen";
 import MapScreen from "../screens/MapScreen";
 import RouteSelectScreen from "../features/routes/screens/RouteSelectScreen";
 import FileManagerScreen from "../screens/FileManagerScreen";
-import RouteCreateScreen from "../screens/RouteCreateScreen";
+
+import RouteCreateScreen from "../features/routes/screens/RouteCreateScreen";
+
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -23,6 +25,7 @@ const Tab = createBottomTabNavigator();
 function MainTabs() {
   return (
     <Tab.Navigator
+      id={undefined}
       initialRouteName="Account"
       screenOptions={{
         headerShown: false,
@@ -112,7 +115,7 @@ function MainTabs() {
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Landing">
+      <Stack.Navigator initialRouteName="Landing" id={undefined}>
         <Stack.Screen
           name="Landing"
           component={LandingScreen}
