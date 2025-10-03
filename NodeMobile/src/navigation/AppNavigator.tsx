@@ -7,12 +7,12 @@ import { Text } from "react-native";
 import { Image } from "react-native";
 
 // Screens
-import AccountCreationScreen from "../screens/AccountCreationScreen";
+import AccountCreationScreen from "../features/account/screens/AccountCreationScreen";
 import LoginScreen from "../screens/LoginScreen";
 import AccountScreen from "../screens/AccountScreen";
 import LandingScreen from "../screens/LandingScreen";
 import MapScreen from "../screens/MapScreen";
-import RouteSelectScreen from "../screens/RouteSelectScreen";
+import RouteSelectScreen from "../features/routes/screens/RouteSelectScreen";
 import FileManagerScreen from "../screens/FileManagerScreen";
 import RouteCreateScreen from "../screens/RouteCreateScreen";
 

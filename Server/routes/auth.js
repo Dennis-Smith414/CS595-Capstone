@@ -1,23 +1,20 @@
-// Server/routes/auth.js
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const { run, all } = require("../Postgres"); // ✅ reuse shared pool
+const { run, all } = require("../Postgres");
 
 const router = express.Router();
 
 const isNonEmpty = (s) => typeof s === "string" && s.trim().length > 0;
+const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 const strongPwd = (s) =>
   typeof s === "string" && s.length >= 8 && /[A-Z]/.test(s) && /[^A-Za-z0-9]/.test(s);
-const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
-// POST /api/auth/register
 router.post("/register", async (req, res) => {
   try {
     let { username, email, password } = req.body || {};
     username = (username || "").trim();
     email = (email || "").trim();
 
-    // Basic validation
     if (!isNonEmpty(username) || !isNonEmpty(email) || !isNonEmpty(password)) {
       return res.status(400).json({ ok: false, error: "All fields are required." });
     }
@@ -31,7 +28,7 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Uniqueness check (case-insensitive)
+    // Uniqueness (case-insensitive)
     const existing = await all(
       `SELECT id FROM users WHERE LOWER(username)=LOWER($1) OR LOWER(email)=LOWER($2)`,
       [username, email]
@@ -40,18 +37,28 @@ router.post("/register", async (req, res) => {
       return res.status(409).json({ ok: false, error: "Username or email already in use." });
     }
 
-    // Hash + insert (column is "password" per your Postgres.js schema)
     const password_hash = await bcrypt.hash(password, 10);
-    const { rows } = await run(
-      `INSERT INTO users (username, email, password)
+
+    const result = await run(
+      `INSERT INTO users (username, email, password_hash)
        VALUES ($1,$2,$3)
        RETURNING id, username, email, create_time`,
       [username, email, password_hash]
     );
 
+    const rows = result?.rows ?? []; // tolerate any wrapper
     return res.status(201).json({ ok: true, user: rows[0] });
   } catch (e) {
-    console.error("POST /api/auth/register error:", e);
+    // These logs make the 500 actionable
+    console.error("POST /api/auth/register error:");
+    console.error("  code:", e?.code);
+    console.error("  message:", e?.message);
+    console.error("  detail:", e?.detail);
+    console.error("  stack:", e?.stack);
+    if (e?.code === "23505") {
+      // unique_violation if you add unique indexes
+      return res.status(409).json({ ok: false, error: "Username or email already in use." });
+    }
     return res.status(500).json({ ok: false, error: "Server error." });
   }
 });
