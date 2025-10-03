@@ -18,8 +18,17 @@ export default function TrailsList() {
 
 
 
-  useEffect(() => { // Tells React to runs this code after the first component renders 
-    fetch(`${API}/api/routes/list?limit=50`) // Combines the API variable with the API call we are trying to make and fetch 
+  useEffect(() => { // Tells React to runs this code after the first component renders
+
+    // 1. Get the token that was saved during login
+    const token = localStorage.getItem('token');
+
+
+    fetch(`${API}/api/routes/list?limit=50`, {
+    headers:  {
+        'Authorization': `Bearer ${token}` // add authorization header to fetch request
+        }
+    }) // Combines the API variable with the API call we are trying to make and fetch
       .then(r => r.json()) // Parses the response object from fetch into a JavaScript object 
       .then(data => setItems(data.items ?? [])) // Data is grabbed by the parsed JSON
       .catch(console.error);
