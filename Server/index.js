@@ -1,17 +1,14 @@
 // Server/index.js
 require("dotenv").config({ path: __dirname + "/.env", override: true });
 
-// ✅ 1. Add a clear boot-time check for DATABASE_URL
-if (!process.env.DATABASE_URL) {
-  console.error("[boot] ❌ No DATABASE_URL found. Check your .env file path and contents.");
-  process.exit(1);
-}
-
-console.log("[boot] ✅ DATABASE_URL =", process.env.DATABASE_URL);
-
 const express = require("express");
 const cors = require("cors");
-const { Pool } = require("pg");        // ✅ 2. Import here for quick connectivity check
+const { Pool } = require("pg");
+
+// Guard: ok if tests inject their own DATABASE_URL later
+if (!process.env.DATABASE_URL) {
+  console.warn("[boot] ⚠️ No DATABASE_URL yet (tests may set it).");
+}
 
 const PORT = process.env.PORT || 5100;
 const app = express();
@@ -19,30 +16,44 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Optional: early DB connectivity check (helps catch SASL/password errors early)
-(async () => {
-  try {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    const r = await pool.query("SELECT NOW()");
-    console.log("[boot] ✅ DB connection OK, time:", r.rows[0].now);
-    await pool.end();
-  } catch (err) {
-    console.error("[boot] ❌ DB connection failed:", err);
-    process.exit(1);   // bail out early if DB is misconfigured
-  }
-})();
-
-// Full GPX/Trails router (list, meta, geojson, bbox, upload)
+// Routes
 const gpxRoutes = require("./routes/gpx");
 const authRoutes = require("./routes/auth");
-
-// mount the routes under /api
 app.use("/api", gpxRoutes);
 app.use("/api/auth", authRoutes);
 
-// health
+// Health
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, db: true, startedAt: new Date().toISOString() });
 });
 
-app.listen(PORT, () => console.log(`🚀 Backend listening on http://localhost:${PORT}`));
+// Boot only does the DB connectivity check now
+async function boot() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("No DATABASE_URL set");
+  }
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    const r = await pool.query("SELECT NOW()");
+    console.log("[boot] ✅ DB connection OK, time:", r.rows[0].now);
+  } finally {
+    await pool.end();
+  }
+}
+
+// Only start the HTTP listener when run directly
+if (require.main === module) {
+  boot()
+    .then(() => {
+      app.listen(PORT, () =>
+        console.log(`🚀 Backend listening on http://localhost:${PORT}`)
+      );
+    })
+    .catch((err) => {
+      console.error("[boot] ❌", err);
+      process.exit(1);
+    });
+}
+
+// Export for tests
+module.exports = { app, boot };

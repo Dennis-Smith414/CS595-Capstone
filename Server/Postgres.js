@@ -1,11 +1,11 @@
 // Server/Postgres.js
 require('dotenv').config();
-
 const { Pool } = require("pg");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  //ssl: { rejectUnauthorized: false },
+  // If using Neon in prod: uncomment SSL line below
+  // ssl: { rejectUnauthorized: false },
 });
 
 /** Write (INSERT/UPDATE/DELETE). Returns { rowCount, rows }. */
@@ -28,7 +28,12 @@ async function get(sql, params = []) {
 
 /** Ensure schema exists. Call this once from index.js before listening. */
 async function init() {
-  // Users
+  // --- Extensions (idempotent) ---
+  await run(`CREATE EXTENSION IF NOT EXISTS postgis`);
+  // If you ever use gen_random_uuid(), also enable pgcrypto:
+  // await run(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+
+  // --- Users ---
   await run(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -39,7 +44,7 @@ async function init() {
     )
   `);
 
-  // Routes
+  // --- Routes ---
   await run(`
     CREATE TABLE IF NOT EXISTS routes (
       id SERIAL PRIMARY KEY,
@@ -53,32 +58,21 @@ async function init() {
     )
   `);
 
+  // --- Waypoints ---
+  await run(`
+    CREATE TABLE IF NOT EXISTS waypoints (
+      id SERIAL PRIMARY KEY,
+      route_id INT NOT NULL REFERENCES routes(id) ON DELETE CASCADE ON UPDATE CASCADE,
+      user_id INT REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+      geom geometry(Point, 4326) NOT NULL,
+      ele DOUBLE PRECISION,
+      name VARCHAR(63) NOT NULL,
+      description TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `);
 
-  // Waypoints
-await run(`
-  CREATE TABLE IF NOT EXISTS waypoints (
-    id SERIAL PRIMARY KEY,
-    route_id INT NOT NULL REFERENCES routes(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    user_id INT REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
-    geom geometry(Point, 4326) NOT NULL,
-    ele DOUBLE PRECISION,
-    name VARCHAR(63) NOT NULL,
-    description TEXT,
-    created_at TIMESTAMPTZ DEFAULT now()
-  )
-`);
-/**
-Example for waypoints table:
-To add a waypoint:
-INSERT INTO waypoints (route_id, geom, name)
-VALUES (1, ST_SetSRID(ST_MakePoint(lon, lat), 4326), 'Summit');
-
-To get it as a point for leaflet:
-SELECT id, name, ST_AsGeoJSON(geom) AS geojson FROM waypoints;
-**/
-
-
-  // Comments
+  // --- Comments ---
   await run(`
     CREATE TABLE IF NOT EXISTS comments (
       id SERIAL PRIMARY KEY,
@@ -89,7 +83,7 @@ SELECT id, name, ST_AsGeoJSON(geom) AS geojson FROM waypoints;
     )
   `);
 
-  // waypoint ratings
+  // --- Ratings (composite PKs) ---
   await run(`
     CREATE TABLE IF NOT EXISTS waypoint_rating (
       user_id INT NOT NULL REFERENCES users(id),
@@ -99,7 +93,6 @@ SELECT id, name, ST_AsGeoJSON(geom) AS geojson FROM waypoints;
     )
   `);
 
-    //route ratings
   await run(`
     CREATE TABLE IF NOT EXISTS route_rating (
       user_id INT NOT NULL REFERENCES users(id),
@@ -109,7 +102,6 @@ SELECT id, name, ST_AsGeoJSON(geom) AS geojson FROM waypoints;
     )
   `);
 
-    //comment ratings
   await run(`
     CREATE TABLE IF NOT EXISTS comment_rating (
       user_id INT NOT NULL REFERENCES users(id),
@@ -119,19 +111,27 @@ SELECT id, name, ST_AsGeoJSON(geom) AS geojson FROM waypoints;
     )
   `);
 
-  // GPX
+  // --- GPX (add IF NOT EXISTS to stop the test failures) ---
   await run(`
-    CREATE TABLE gpx (
+    CREATE TABLE IF NOT EXISTS gpx (
       id SERIAL PRIMARY KEY,
       route_id INT REFERENCES routes(id) ON DELETE CASCADE,
       name TEXT,
       geometry geometry(LINESTRING, 4326) NOT NULL,
       file BYTEA NOT NULL,
       created_at TIMESTAMPTZ DEFAULT now()
-      )
-    `);
+    )
+  `);
 
+  // Optional helpful indexes (idempotent)
+  await run(`CREATE INDEX IF NOT EXISTS idx_routes_slug ON routes(slug)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_gpx_route_id ON gpx(route_id)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_waypoints_route ON waypoints(route_id)`);
 }
 
+/** Close the pool (call in tests' afterAll) */
+async function end() {
+  await pool.end();
+}
 
-module.exports = { init, run, all, get };
+module.exports = { init, run, all, get, end, pool };
