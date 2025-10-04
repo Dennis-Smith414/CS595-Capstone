@@ -1,34 +1,56 @@
 import { useState } from "react";
 import styles from "./Login.module.css";
-import logo from "../assets/logo.png"; // 
-import { useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
+import logo from "../assets/logo.png";
+import { useNavigate, Link } from "react-router-dom";
+
+const API =
+  (import.meta as any)?.env?.VITE_API_BASE ||
+  (window as any).__API_BASE__ ||
+  "http://localhost:5000";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
     if (!username || !password) {
       setError("Please enter a username and password.");
       return;
     }
 
-    alert(`Logged in as ${username} (demo)`);
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.token) {
+        throw new Error(data?.error || `Login failed (${res.status})`);
+      }
+
+      localStorage.setItem("token", data.token);
+      // optionally: localStorage.setItem("user", JSON.stringify(data.user));
+      navigate("/app", { replace: true });
+    } catch (err: any) {
+      setError(err?.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        {/* Logo */}
         <img src={logo} alt="OpenCairn Logo" className={styles.logo} />
-
-        {/* Title */}
         <h1 className={styles.title}>Welcome to OpenCairn</h1>
 
         <form onSubmit={onSubmit} className={styles.form}>
@@ -44,13 +66,7 @@ export default function Login() {
               required
             />
           </label>
-          <div className="card">
 
-            <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-            
-
-            </div>
-          </div>
           <label className={styles.label}>
             Password
             <div style={{ position: "relative" }}>
@@ -75,22 +91,36 @@ export default function Login() {
 
           {error && <div className={styles.error}>{error}</div>}
 
-          <button type="submit" className={styles.button}>
-            Log In
+          <button type="submit" className={styles.button} disabled={loading}>
+            {loading ? "Logging in…" : "Log In"}
           </button>
+
           <button
             type="button"
             className={styles.Create_button}
-            onClick={() => navigate("/register")}  // must be lowercase to match route
+            onClick={() => navigate("/register")}
           >
             Create Account
           </button>
-          <button type="submit" className={styles.Map_button}>
+
+          {/* Make these non-submit to avoid interfering with login */}
+          <button
+            type="button"
+            className={styles.Map_button}
+            onClick={() => navigate("/demo-map")}
+          >
             Demo Map
           </button>
-            <Link to="/routes">
-                  <button type="button"className={styles.Routes_button}  style={{ width: "100%", padding: 12 }}>Routes</button>
-            </Link>
+
+          <Link to="/app">
+            <button
+              type="button"
+              className={styles.Routes_button}
+              style={{ width: "100%", padding: 12 }}
+            >
+              Routes
+            </button>
+          </Link>
         </form>
       </div>
     </div>

@@ -1,14 +1,17 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const { run, all } = require("../Postgres");
+const jwt = require("jsonwebtoken");              // ✅ add
+const { run, all, get } = require("../Postgres"); // ✅ add get
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 
 const isNonEmpty = (s) => typeof s === "string" && s.trim().length > 0;
 const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 const strongPwd = (s) =>
   typeof s === "string" && s.length >= 8 && /[A-Z]/.test(s) && /[^A-Za-z0-9]/.test(s);
 
+// POST /api/auth/register
 router.post("/register", async (req, res) => {
   try {
     let { username, email, password } = req.body || {};
@@ -46,20 +49,51 @@ router.post("/register", async (req, res) => {
       [username, email, password_hash]
     );
 
-    const rows = result?.rows ?? []; // tolerate any wrapper
+    const rows = result?.rows ?? [];
     return res.status(201).json({ ok: true, user: rows[0] });
   } catch (e) {
-    // These logs make the 500 actionable
     console.error("POST /api/auth/register error:");
     console.error("  code:", e?.code);
     console.error("  message:", e?.message);
     console.error("  detail:", e?.detail);
     console.error("  stack:", e?.stack);
     if (e?.code === "23505") {
-      // unique_violation if you add unique indexes
       return res.status(409).json({ ok: false, error: "Username or email already in use." });
     }
     return res.status(500).json({ ok: false, error: "Server error." });
+  }
+});
+
+// POST /api/auth/login
+router.post("/login", async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ ok: false, error: "Missing credentials" });
+    }
+
+    // 🔧 select password_hash (not password)
+    const user = await get(
+      `SELECT id, username, password_hash
+         FROM users
+        WHERE username = $1`,
+      [username]
+    );
+    if (!user) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+
+    const token = jwt.sign(
+      { sub: user.id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ ok: true, token, user: { id: user.id, username: user.username } });
+  } catch (e) {
+    console.error("POST /api/auth/login error:", e);
+    res.status(500).json({ ok: false, error: "Server error" });
   }
 });
 

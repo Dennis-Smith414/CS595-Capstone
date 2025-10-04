@@ -20,8 +20,16 @@ app.use(express.json());
 // Routes
 const gpxRoutes = require("./routes/gpx");
 const authRoutes = require("./routes/auth");
-app.use("/api", gpxRoutes);
-app.use("/api/auth", authRoutes);
+
+const routesRouter = require("./routes/routes");
+
+// Routers
+app.use("/api/health", require("./routes/health"));
+app.use("/api/dbinfo", require("./routes/dbinfo"));
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/routes", require("./routes/routes"));  // list, :id.geojson, :id.gpx
+app.use("/api", require("./routes/gpx"));           // if gpx.js exposes additional /api endpoints
+
 
 // Health
 app.get("/api/health", (req, res) => {
@@ -42,9 +50,11 @@ async function boot() {
   }
 }
 
-// Only start the HTTP listener when run directly
+const { init } = require("./Postgres");  // ← import init
+
 if (require.main === module) {
   boot()
+    .then(() => init())                  // ← ensure schema is ready
     .then(() => {
       app.listen(PORT, () =>
         console.log(`🚀 Backend listening on http://localhost:${PORT}`)
@@ -55,6 +65,7 @@ if (require.main === module) {
       process.exit(1);
     });
 }
+
 
 // Export for tests
 module.exports = { app, boot };
