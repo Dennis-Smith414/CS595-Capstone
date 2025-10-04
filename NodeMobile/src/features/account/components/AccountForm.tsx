@@ -124,15 +124,36 @@ export default function AccountForm({
           returnKeyType="done"
         />
 
-        {error ? <Text style={S.error}>{error}</Text> : null}
+{error ? (
+  <Text testID="account-error" accessibilityRole="alert" style={S.error}>
+    {error}
+  </Text>
+) : null}
 
-        <TouchableOpacity style={[S.button, S.primary]} onPress={handleCreate} disabled={busy}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={S.buttonText}>Create Account</Text>}
-        </TouchableOpacity>
+<TouchableOpacity
+  style={[S.button, S.primary]}
+  onPress={handleCreate}
+  disabled={busy}
+  accessibilityRole="button"
+  accessibilityLabel="submit-create-account"
+  testID="submit-create-account"
+>
+  {busy ? (
+    <ActivityIndicator color="#fff" />
+  ) : (
+    <Text style={S.buttonText}>Create Account</Text>
+  )}
+</TouchableOpacity>
 
-        <TouchableOpacity style={[S.button, S.secondary]} onPress={onCancel}>
-          <Text style={S.secondaryText}>Cancel</Text>
-        </TouchableOpacity>
+<TouchableOpacity
+  style={[S.button, S.secondary]}
+  onPress={onCancel}
+  accessibilityRole="button"
+  accessibilityLabel="cancel-create-account"
+  testID="cancel-create-account"
+>
+  <Text style={S.secondaryText}>Cancel</Text>
+</TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -7,7 +7,7 @@ export default function AccountCreationScreen({ navigation }: { navigation: any 
   return (
     <AccountForm
       logoSource={require("../../../assets/images/OCLogoLight.png")}
-      createUser={createUser}          // <-- give the API function
+      createUser={createUser}
       onSuccess={() => navigation.goBack()}
       onCancel={() => navigation.goBack()}
     />
