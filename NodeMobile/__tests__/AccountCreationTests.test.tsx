@@ -1,13 +1,6 @@
 // __tests__/AccountCreationTests.test.tsx
-/**
- * What:
- *   Tests for AccountCreationScreen (via AccountForm).
- *
- * Why:
- *   - Validate client-side guards (empty fields, mismatch, weak password)
- *   - Verify happy path calls createUser with the right payload
- *   - Confirm we navigate away on success
- */
+
+
 
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react-native";
