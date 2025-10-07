@@ -1,18 +1,14 @@
 import nodejs from 'nodejs-mobile-react-native';
 import { useEffect, useRef } from 'react';
 import AppNavigator from './src/navigation/AppNavigator';
-import { RouteSelectionProvider } from './src/context/RouteSelectionContext';
-
-console.log('App.js: Starting App component');
+import { RouteSelectionProvider } from './src/context/RouteSelectionContext';  // 👈 import the provider
 
 export default function App() {
   const startedRef = useRef(false);
 
   useEffect(() => {
-    console.log('App.js: useEffect triggered');
     if (!startedRef.current) {
-      console.log('App.js: nodejs.start() called');
-   //   nodejs.start('sqlite-server.js'); // must match file in nodejs-project/
+      // nodejs.start('sqlite-server.js'); // must match file in nodejs-project/
       startedRef.current = true;
     }
 
@@ -20,14 +16,9 @@ export default function App() {
       console.log('[RN] from Node:', msg);
     };
     nodejs.channel.addListener('message', handler);
-    console.log('App.js: Node.js channel listener added');
-    return () => {
-      nodejs.channel.removeListener('message', handler);
-      console.log('App.js: Node.js channel listener removed');
-    };
+    return () => nodejs.channel.removeListener('message', handler);
   }, []);
 
-  console.log('App.js: Rendering AppNavigator');
   return (
     <RouteSelectionProvider>
       <AppNavigator />
