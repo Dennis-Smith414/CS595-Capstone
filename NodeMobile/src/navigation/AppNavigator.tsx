@@ -112,7 +112,15 @@ function MainTabs() {
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Landing">
+      <Stack.Navigator initialRouteName="Landing"
+        screenOptions={{
+            header: (props) => <TouchableOpacity
+                                       style={[baseStyles.button, baseStyles.buttonPrimary]}
+                                       onPress={() => navigation.navigate("Login")}>
+                                       <Text style={[baseStyles.buttonText]}>Login</Text>
+                                     </TouchableOpacity>
+            }}
+      >
         <Stack.Screen
           name="Landing"
           component={LandingScreen}
