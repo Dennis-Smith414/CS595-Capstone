@@ -5,9 +5,11 @@ console.log('[boot] DATABASE_URL =', process.env.DATABASE_URL);
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
+const jwt = require("jsonwebtoken");
 
 const router = express.Router();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const JWT_SECRET = process.env.JWT_SECRET
 
 const isNonEmpty = (s) => typeof s === "string" && s.trim().length > 0;
 const strongPwd = (s) =>
@@ -22,7 +24,7 @@ const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
       username       TEXT NOT NULL,
       email          TEXT NOT NULL,
       password_hash  TEXT NOT NULL,
-      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      create_time    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_ci_uq ON users (LOWER(username));
@@ -41,6 +43,8 @@ const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // POST /api/auth/register
 router.post("/register", async (req, res) => {
+console.log("➡️  /register called with body:", req.body);
+
   try {
     let { username, email, password } = req.body || {};
     username = (username || "").trim();
@@ -71,13 +75,50 @@ router.post("/register", async (req, res) => {
     const ins = await pool.query(
       `INSERT INTO users (username, email, password_hash)
        VALUES ($1,$2,$3)
-       RETURNING id, username, email, created_at`,
+       RETURNING id, username, email, create_time`,
       [username, email, password_hash]
     );
 
     res.status(201).json({ ok: true, user: ins.rows[0] });
   } catch (e) {
     console.error("POST /api/auth/register error:", e);
+    res.status(500).json({ ok: false, error: "Server error." });
+  }
+});
+
+// POST /api/auth/login
+router.post("/login", async (req, res) => {
+  try {
+    let { username, password } = req.body || {};
+    username = (username || "").trim();
+
+    if (!username || !password) {
+      return res.status(400).json({ ok: false, error: "Username and password required." });
+    }
+
+    const result = await pool.query(
+      "SELECT id, username, password_hash FROM users WHERE LOWER(username) = LOWER($1)",
+      [username]
+    );
+    if (result.rowCount === 0) {
+      return res.status(400).json({ ok: false, error: "Invalid username or password." });
+    }
+
+    const user = result.rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res.status(400).json({ ok: false, error: "Invalid username or password." });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ ok: true, token });
+  } catch (e) {
+    console.error("POST /api/auth/login error:", e);
     res.status(500).json({ ok: false, error: "Server error." });
   }
 });

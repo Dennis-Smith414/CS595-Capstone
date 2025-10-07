@@ -4,6 +4,8 @@ import logo from "../assets/logo.png"; //
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 
+const API = import.meta.env.VITE_API_URL || "http://localhost:5100";
+
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -11,17 +13,35 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+      e.preventDefault();
+      setError(null);
 
-    if (!username || !password) {
-      setError("Please enter a username and password.");
-      return;
+      try {
+        const response = await fetch(`${API}/api/auth/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: username.trim(),
+            password: password,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "Invalid username or password.");
+        }
+        // --- SUCCESSFUL LOGIN ---
+        // The server sends back a token. We need to save it.
+        // localStorage is the standard place to save it in a web browser.
+        localStorage.setItem("token", data.token);
+
+        // Redirect the user to the main part of the application.
+        navigate("/routes"); // Or wherever your main map/dashboard is
+      } catch (err: any) {
+        setError(err.message);
+      }
     }
-
-    alert(`Logged in as ${username} (demo)`);
-  }
-
   return (
     <div className={styles.page}>
       <div className={styles.card}>
