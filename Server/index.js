@@ -33,12 +33,16 @@ app.use(express.json());
 })();
 
 // Full GPX/Trails router (list, meta, geojson, bbox, upload)
+const authorize = require("./middleware/authorize");
 const gpxRoutes = require("./routes/gpx");
 const authRoutes = require("./routes/auth");
 
-// mount the routes under /api
-app.use("/api", gpxRoutes);
+// mount the PUBLIC routes under /api
 app.use("/api/auth", authRoutes);
+
+// mount the PRIVATE routes with middleware/authorize,
+// any request to a gpxRoute will now require a valid token
+app.use("/api", authorize, gpxRoutes);
 
 // health
 app.get("/api/health", (req, res) => {
