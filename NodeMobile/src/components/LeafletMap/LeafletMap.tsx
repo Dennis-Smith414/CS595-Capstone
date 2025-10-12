@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
-import { StyleSheet, Image } from "react-native";
+import { StyleSheet, Image, View, TouchableOpacity, Text } from "react-native";
 import { WebView } from "react-native-webview";
 import type { WebViewMessageEvent } from "react-native-webview";
 
@@ -25,6 +25,7 @@ interface LeafletMapProps {
   onMapLongPress?: (lat: number, lon: number) => void;
   waypoints?: Waypoint[];
   onWaypointPress?: (wp: Waypoint | null) => void;
+  showTrackingButton?: boolean; // default true
 }
 
 const FALLBACK_CENTER: LatLng = [37.7749, -122.4194];
@@ -39,12 +40,16 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
   onMapLongPress,
   waypoints = [],
   onWaypointPress,
+  showTrackingButton = true,
 }) => {
   const webRef = useRef<WebView>(null);
   const [isReady, setIsReady] = useState(false);
   const didSetInitialView = useRef(false);
 
-  // --- bridge messages from the HTML ---
+  // Follow-me state (starts ON, like before)
+  const [tracking, setTracking] = useState<boolean>(true);
+
+  // --- messages from HTML ---
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       const raw = event.nativeEvent.data;
@@ -53,9 +58,6 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
         if (!data) return;
 
         switch (data.type) {
-          case "LOG":
-            console.log("Map log:", data.msg);
-            break;
           case "MAP_READY":
             setIsReady(true);
             onMapReady?.();
@@ -69,17 +71,21 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
           case "MAP_TAP":
             onWaypointPress?.(null);
             break;
+          case "USER_GESTURE":
+            // user dragged/zoomed → stop following
+            setTracking(false);
+            break;
           default:
-            console.log("Unrecognized message type:", data.type);
+            break;
         }
       } catch (e) {
-        console.error("LeafletMap: Message parse error:", e, raw);
+        console.error("LeafletMap message parse error:", e, raw);
       }
     },
     [onMapLongPress, onMapReady, onWaypointPress]
   );
 
-  // --- set the initial view ONCE after MAP_READY ---
+  // set initial camera ONCE
   useEffect(() => {
     if (!isReady || didSetInitialView.current) return;
     didSetInitialView.current = true;
@@ -87,11 +93,10 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
       window.__setView(${center[0]}, ${center[1]}, ${zoom});
       true;
     `);
-    // We intentionally do NOT depend on center/zoom to avoid recentering on every prop change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
-  // --- draw/clear the route (HTML calls fitBounds once) ---
+  // draw route (fits once) and stop following so user can explore
   useEffect(() => {
     if (!isReady) return;
     if (coordinates && coordinates.length) {
@@ -101,25 +106,28 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
         window.__setCoords(${JSON.stringify(payload)});
         true;
       `);
+      setTracking(false);
     } else {
       webRef.current?.injectJavaScript(`window.__clearMap(); true;`);
     }
   }, [isReady, coordinates]);
 
-  // --- update/remove the user marker (no recentering in HTML) ---
+  // blue dot + optional pan when tracking
   useEffect(() => {
     if (!isReady) return;
     if (userLocation) {
+      const [lat, lng] = userLocation;
       webRef.current?.injectJavaScript(`
-        window.__setUserLocation(${userLocation[0]}, ${userLocation[1]});
+        window.__setUserLocation(${lat}, ${lng});
+        ${tracking ? `window.__panTo(${lat}, ${lng});` : ""}
         true;
       `);
     } else {
       webRef.current?.injectJavaScript(`window.__removeUserLocation(); true;`);
     }
-  }, [isReady, userLocation]);
+  }, [isReady, userLocation, tracking]);
 
-  // --- static icon URIs memoized to appease exhaustive-deps ---
+  // waypoint icons (memoized)
   const iconUrls = useMemo(
     () => ({
       generic: Image.resolveAssetSource(require("../../assets/icons/waypoints/generic.png")).uri,
@@ -134,7 +142,6 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
     []
   );
 
-  // --- push waypoints + icons to the HTML ---
   useEffect(() => {
     if (!isReady) return;
     const payload = { waypoints: waypoints || [], iconUrls };
@@ -144,23 +151,70 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
     `);
   }, [isReady, waypoints, iconUrls]);
 
+  // pill action
+  const enableTracking = () => {
+    setTracking(true);
+    if (isReady && userLocation) {
+      const [lat, lng] = userLocation;
+      webRef.current?.injectJavaScript(`window.__panTo(${lat}, ${lng}); true;`);
+    }
+  };
+
   return (
-    <WebView
-      ref={webRef}
-      originWhitelist={["*"]}
-      source={require("./LeafletHTML.html")}
-      onMessage={handleMessage}
-      style={styles.flex}          // no inline styles → clears eslint warning
-      javaScriptEnabled
-      domStorageEnabled
-      allowFileAccess
-      mixedContentMode="always"
-    />
+    <View style={styles.container}>
+      <WebView
+        ref={webRef}
+        originWhitelist={["*"]}
+        source={require("./LeafletHTML.html")}
+        onMessage={handleMessage}
+        style={styles.map}
+        javaScriptEnabled
+        domStorageEnabled
+        allowFileAccess
+        mixedContentMode="always"
+      />
+
+      {showTrackingButton && (
+        <TouchableOpacity
+          onPress={tracking ? undefined : enableTracking}
+          activeOpacity={0.85}
+          style={[styles.pill, tracking ? styles.pillOn : styles.pillOff]}
+        >
+          <View style={[styles.dot, tracking ? styles.dotOn : styles.dotOff]} />
+          <Text style={styles.pillText}>{tracking ? "Tracking" : "Enable Tracking"}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  container: { flex: 1 },
+  map: { flex: 1 },
+
+  pill: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  pillOn: { backgroundColor: "rgba(230,255,240,0.95)" },
+  pillOff: { backgroundColor: "rgba(255,255,255,0.95)" },
+  pillText: { fontSize: 13, fontWeight: "600" },
+
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  dotOn: { backgroundColor: "#22c55e" },
+  dotOff: { backgroundColor: "#999" },
 });
 
 export default LeafletMap;
