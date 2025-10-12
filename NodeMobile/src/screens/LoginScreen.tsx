@@ -2,148 +2,121 @@ import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { API_BASE } from "../lib/api";
 import {
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Image,
-    Alert,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Image,
 } from "react-native";
 import { baseStyles, colors } from "../styles/theme";
 
 export default function LoginScreen({ navigation }: { navigation: any }) {
-    const [username, setUsername] = useState("");
-    const [password, setPassword] = useState("");
-    const [error, setError] = useState<string | null>(null);
-    const { login } = useAuth(); // Get the login function from context
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { login } = useAuth(); // context login(token)
 
-    const handleLogin = async () => {
-        setError(null);
+  const handleLogin = async () => {
+    setError(null);
 
-        if (!username.trim() || !password) {
-            setError("Please fill out all fields.");
-            return;
-        }
+    const u = username.trim();
+    const p = password;
 
-        try {
-          const response = await fetch(`${API_BASE}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username.trim(), password }),
-          });
-            const responseText = await response.text();
-            const data = JSON.parse(responseText);
+    if (!u || !p) {
+      setError("emailOrUsername and password required");
+      return;
+    }
 
-          if (!response.ok) {
-            throw new Error(data.error || 'Invalid credentials.');
-          }
+    try {
+      const res = await fetch(`${API_BASE.replace(/\/+$/, "")}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        // IMPORTANT: server expects "emailOrUsername"
+        body: JSON.stringify({ emailOrUsername: u, password: p }),
+      });
 
-          // On success, call the context's login function with the token.
-          // The context will handle storing the token and triggering navigation.
-          login(data.token);
+      const text = await res.text();
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { /* ignore bad JSON */ }
 
-        } catch (err: any) {
-          setError(err.message);
-        }
-      };
+      if (!res.ok || !data?.ok || !data?.token) {
+        throw new Error(data?.error || `Login failed (${res.status})`);
+      }
 
-    return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
-            >
-                <Image
-                    source={require("../assets/images/OCLogoLight.png")}
-                    style={styles.logo}
-                    resizeMode="contain"
-                />
+      // Hand token to auth context (it persists + navigates in your app flow)
+      login(data.token);
+    } catch (err: any) {
+      setError(err?.message || "Network error");
+    }
+  };
 
-                <View style={styles.form}>
-                    <TextInput
-                        style={baseStyles.input}
-                        placeholder="Username"
-                        placeholderTextColor={colors.textSecondary}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        value={username}
-                        onChangeText={setUsername}
-                        returnKeyType="next"
-                    />
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <Image source={require("../assets/images/OCLogoLight.png")} style={styles.logo} resizeMode="contain" />
 
-                    <TextInput
-                        style={baseStyles.input}
-                        placeholder="Password"
-                        placeholderTextColor={colors.textSecondary}
-                        secureTextEntry
-                        autoCapitalize="none"
-                        value={password}
-                        onChangeText={setPassword}
-                        returnKeyType="done"
-                        onSubmitEditing={handleLogin}
-                    />
+        <View style={styles.form}>
+          <TextInput
+            style={baseStyles.input}
+            placeholder="Username or Email"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={username}
+            onChangeText={setUsername}
+            returnKeyType="next"
+          />
 
-                    {error && <Text style={baseStyles.error}>{error}</Text>}
+          <TextInput
+            style={baseStyles.input}
+            placeholder="Password"
+            placeholderTextColor={colors.textSecondary}
+            secureTextEntry
+            autoCapitalize="none"
+            value={password}
+            onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={handleLogin}
+          />
 
-                    <TouchableOpacity
-                        style={[baseStyles.button, baseStyles.buttonPrimary, styles.loginButton]}
-                        onPress={handleLogin}
-                    >
-                        <Text style={baseStyles.buttonText}>Log In</Text>
-                    </TouchableOpacity>
+          {error && <Text style={baseStyles.error}>{error}</Text>}
 
-                    <TouchableOpacity
-                        style={[baseStyles.button, baseStyles.buttonSecondary]}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Text style={baseStyles.buttonText}>Cancel</Text>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
-    );
+          <TouchableOpacity
+            style={[baseStyles.button, baseStyles.buttonPrimary, styles.loginButton]}
+            onPress={handleLogin}
+          >
+            <Text style={baseStyles.buttonText}>Log In</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[baseStyles.button, baseStyles.buttonSecondary]}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={baseStyles.buttonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 24,
-        paddingVertical: 32,
-    },
-    logo: {
-        width: "80%",
-        height: 140,
-        marginBottom: 24,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: "700",
-        color: colors.text,
-        marginBottom: 8,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: colors.textSecondary,
-        marginBottom: 32,
-    },
-    form: {
-        width: "100%",
-        alignItems: "center",
-    },
-    loginButton: {
-        marginTop: 8,
-    },
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+  },
+  logo: { width: "80%", height: 140, marginBottom: 24 },
+  form: { width: "100%", alignItems: "center" },
+  loginButton: { marginTop: 8 },
 });
