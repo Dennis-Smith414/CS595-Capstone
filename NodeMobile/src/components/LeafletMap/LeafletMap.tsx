@@ -28,7 +28,8 @@ interface LeafletMapProps {
   showTrackingButton?: boolean; // default true
 }
 
-const FALLBACK_CENTER: LatLng = [37.7749, -122.4194];
+//43.075915779364294, -87.88550589992784
+const FALLBACK_CENTER: LatLng = [43.075915779364294, -87.88550589992784]; // <--Fall back is now UWM rendering the fallback should be removed later on
 const DEFAULT_ZOOM = 13;
 
 const LeafletMap: React.FC<LeafletMapProps> = ({
@@ -46,8 +47,10 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
   const [isReady, setIsReady] = useState(false);
   const didSetInitialView = useRef(false);
 
-  // Follow-me state (starts ON, like before)
-  const [tracking, setTracking] = useState<boolean>(true);
+  // Follow-me state 
+  const [tracking, setTracking] = useState<boolean>(true); //<--- Detects noable changes in postion
+
+  const lastLocationRef = useRef<LatLng | null>(null);
 
   // --- messages from HTML ---
   const handleMessage = useCallback(
@@ -112,16 +115,27 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
     }
   }, [isReady, coordinates]);
 
-  // blue dot + optional pan when tracking
+  // Blue location dot should NEVER pan now
   useEffect(() => {
     if (!isReady) return;
     if (userLocation) {
       const [lat, lng] = userLocation;
-      webRef.current?.injectJavaScript(`
-        window.__setUserLocation(${lat}, ${lng});
-        ${tracking ? `window.__panTo(${lat}, ${lng});` : ""}
-        true;
+      const lastLoc = lastLocationRef.current;
+
+      //Check if there is a noteworthy change in positon
+      const hasChanged = !lastLoc || 
+        Math.abs(lastLoc[0] - lat) > 0.00001 ||
+        Math.abs(lastLoc[1] - lng) > 0.00001;
+
+      //Update the users postion
+      if (hasChanged) {
+        lastLocationRef.current = [lat, lng];
+        webRef.current?.injectJavaScript(`
+          window.__setUserLocation(${lat}, ${lng});
+          true;
       `);
+
+      }
     } else {
       webRef.current?.injectJavaScript(`window.__removeUserLocation(); true;`);
     }

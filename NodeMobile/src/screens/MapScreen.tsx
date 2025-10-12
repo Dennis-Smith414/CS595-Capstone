@@ -11,7 +11,6 @@ import { colors } from '../styles/theme';
 import { fetchWaypoints } from "../lib/waypoints";
 import { WaypointPopup } from "../components/LeafletMap/WaypointPopup";
 
-
 const DEFAULT_CENTER: LatLng = [37.7749, -122.4194];
 const DEFAULT_ZOOM = 15;
 
@@ -51,7 +50,7 @@ const MapScreen: React.FC = () => {
             const hasPermission = await requestPermission();
             if (!hasPermission || !mounted) return;
 
-        const handleWaypointPress = (wp) => {
+        const handleWaypointPress = (wp: any) => {
           setSelectedWaypoint(wp);
         };
 
