@@ -1,11 +1,21 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { WebView } from 'react-native-webview';
 import { WebView as WebViewType } from 'react-native-webview';
+import { Image } from "react-native";
 
 export type LatLng = [number, number];
 
 interface MapPayload {
   coords: LatLng[];
+}
+
+interface Waypoint {
+  id: number;
+  name: string;
+  description?: string;
+  lat: number;
+  lon: number;
+  type?: string;
 }
 
 interface LeafletMapProps {
@@ -15,6 +25,8 @@ interface LeafletMapProps {
   userLocation?: LatLng | null;
   onMapReady?: () => void;
   onMapLongPress?: (lat: number, lon: number) => void;
+  waypoints?: Waypoint[];
+  onWaypointPress?: (wp: Waypoint | null) => void;
 }
 
 const FALLBACK_CENTER: LatLng = [37.7749, -122.4194];
@@ -27,6 +39,8 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
   userLocation = null,
   onMapReady,
   onMapLongPress,
+  waypoints = [],
+  onWaypointPress,
 }) => {
   const webRef = useRef<WebViewType>(null);
   const [isReady, setIsReady] = useState(false);
@@ -57,15 +71,27 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
               if (onMapLongPress) onMapLongPress(data.lat, data.lon);
               break;
 
+            case "WAYPOINT_CLICK":
+              if (data.waypoint) {
+                console.log("Waypoint clicked:", data.waypoint);
+                onWaypointPress?.(data.waypoint);
+              }
+              break;
+
+            case "MAP_TAP":
+              onWaypointPress?.(null);
+              break;
+
             default:
               console.log("Unrecognized message type:", data.type);
               break;
+
           }
         } catch (e) {
           console.error("LeafletMap: Message parse error:", e, raw);
         }
       },
-      [onMapReady, onMapLongPress]
+      [onMapReady, onMapLongPress, onWaypointPress]
     );
 
   useEffect(() => {
@@ -101,6 +127,39 @@ const LeafletMap: React.FC<LeafletMapProps> = ({
       webRef.current?.injectJavaScript(`window.__removeUserLocation(); true;`);
     }
   }, [isReady, userLocation]);
+
+
+
+
+
+  const iconUrls = {
+    generic: Image.resolveAssetSource(require("../../assets/icons/waypoints/generic.png")).uri,
+    water: Image.resolveAssetSource(require("../../assets/icons/waypoints/water.png")).uri,
+    campsite: Image.resolveAssetSource(require("../../assets/icons/waypoints/campsite.png")).uri,
+    roadAccess: Image.resolveAssetSource(require("../../assets/icons/waypoints/road-access-point.png")).uri,
+    intersection: Image.resolveAssetSource(require("../../assets/icons/waypoints/intersection.png")).uri,
+    hazard: Image.resolveAssetSource(require("../../assets/icons/waypoints/hazard.png")).uri,
+    landmark: Image.resolveAssetSource(require("../../assets/icons/waypoints/landmark.png")).uri,
+    parkingTrailhead: Image.resolveAssetSource(require("../../assets/icons/waypoints/parking-trailhead.png")).uri,
+  };
+
+
+  useEffect(() => {
+      if (!isReady || !waypoints) return;
+
+      const payload = { waypoints, iconUrls }; // pass icons along
+      const json = JSON.stringify(payload);
+
+      webRef.current?.injectJavaScript(`
+        try {
+          window.__setWaypoints(${json});
+          true;
+        } catch (err) {
+          console.log('Error injecting waypoints', err);
+          false;
+        }
+      `);
+    }, [isReady, waypoints]);
 
   return (
     <WebView

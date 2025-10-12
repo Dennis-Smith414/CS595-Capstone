@@ -1,11 +1,12 @@
-// Server/routes/auth.js
-// Minimal auth router: register, login, and /me (JWT-protected)
+require('dotenv').config({ path: '../.env' });
+console.log('[boot] DATABASE_URL =', process.env.DATABASE_URL);
 
 require("dotenv").config(); // reads Server/.env
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
+const jwt = require("jsonwebtoken");
 
 const router = express.Router();
 
@@ -116,99 +117,48 @@ router.post("/register", async (req, res) => {
   }
 });
 
-/**
- * POST /api/auth/login
- * body: { emailOrUsername, password }
- */
+// POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
-    const { emailOrUsername, password } = req.body || {};
-    if (!emailOrUsername || !password) {
-      return res.status(400).json({ ok: false, error: "emailOrUsername and password required" });
+    let { username, password } = req.body || {};
+    username = (username || "").trim();
+
+    if (!isNonEmpty(username) || !isNonEmpty(password)) {
+      return res.status(400).json({ ok: false, error: "Username and password are required." });
     }
 
-    const q = await pool.query(
-      `SELECT id, username, email, password_hash, created_at
-         FROM users
-        WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)
-        LIMIT 1`,
-      [String(emailOrUsername)]
+    // Find the user by their username
+    const result = await pool.query(
+      `SELECT id, username, password_hash FROM users WHERE LOWER(username) = LOWER($1)`,
+      [username]
     );
 
-    if (!q.rowCount) {
-      return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    if (result.rowCount === 0) {
+      return res.status(400).json({ ok: false, error: "Invalid username or password." });
     }
 
-    const user = q.rows[0];
-    const ok = await bcrypt.compare(String(password), user.password_hash);
-    if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+    const user = result.rows[0];
 
-    const token = signToken(user);
-    return res.json({ ok: true, user: pickUserSafe(user), token });
+    // Check if the provided password matches the stored hash
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
+    if (!isValidPassword) {
+      return res.status(400).json({ ok: false, error: "Invalid username or password." });
+    }
+
+    // If login is successful, create a JWT
+    const token = jwt.sign(
+      { id: user.id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" } // Token expires in 1 day
+    );
+
+    res.json({ ok: true, token });
+
   } catch (e) {
     console.error("POST /api/auth/login error:", e);
-    return res.status(500).json({ ok: false, error: "Server error" });
+    res.status(500).json({ ok: false, error: "Server error." });
   }
 });
-
-/**
- * GET /api/auth/me
- *   Authorization: Bearer <token>
- */
-router.get("/me", authRequired, async (req, res) => {
-  try {
-    const { uid } = req.user;
-    const q = await pool.query(
-      `SELECT id, username, email, created_at FROM users WHERE id = $1 LIMIT 1`,
-      [uid]
-    );
-    if (!q.rowCount) return res.status(404).json({ ok: false, error: "User not found" });
-    return res.json({ ok: true, user: q.rows[0] });
-  } catch (e) {
-    console.error("GET /api/auth/me error:", e);
-    return res.status(500).json({ ok: false, error: "Server error" });
-  }
-});
-// Login.tsx (only the bits that matter)
-// make sure your fetch calls include `credentials: "include"`
-
-async function handleLogin() {
-  setLoading(true);
-  setError(null);
-
-  try {
-    const res = await fetch("http://localhost:5000/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",                // << important for cookie
-      body: JSON.stringify({
-        usernameOrEmail: username,           // or email field
-        password,
-      }),
-    });
-
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      throw new Error(data.error || "Login failed");
-    }
-
-    // get current user from /me to prove cookie works
-    const meRes = await fetch("http://localhost:5000/api/auth/me", {
-      credentials: "include",
-    });
-    const me = await meRes.json();
-
-    // (quick-and-dirty) stash the user in localStorage so we can show it on the page
-    localStorage.setItem("oc:user", JSON.stringify(me.user));
-    // Navigate somewhere (routes page or map), or replace the alert:
-    // navigation("/routes") or similar
-    alert(`Logged in as ${me.user.username} (${me.user.email})`);
-  } catch (err) {
-    console.error(err);
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
-}
 
 module.exports = router;
