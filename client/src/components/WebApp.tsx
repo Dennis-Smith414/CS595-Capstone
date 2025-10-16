@@ -1,4 +1,3 @@
-// client/src/components/WebApp.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -99,6 +98,7 @@ const sx: Record<string, React.CSSProperties> = {
   },
   radioDot: { width: 12, height: 12, borderRadius: 999, background: "#0ec1ac", transition: "opacity .15s ease" },
 
+  mapWrap: { position: "relative" },
   map: {
     width: "100%",
     height: "calc(100vh - 72px - 72px - 24px)",
@@ -116,6 +116,19 @@ const sx: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     fontSize: 12,
   },
+  chooser: {
+    position: "fixed",
+    transform: "translate(-50%,-110%)",
+    background: "#fff",
+    border: "1px solid #e6eaf0",
+    borderRadius: 12,
+    padding: 8,
+    boxShadow: "0 8px 24px rgba(16,42,67,0.15)",
+    display: "grid",
+    gridTemplateColumns: "repeat(3, auto)",
+    gap: 6,
+    zIndex: 1000,
+  } as React.CSSProperties,
 
   cardTitle: { margin: 0, fontWeight: 800, fontSize: 16 },
 };
@@ -168,6 +181,19 @@ type GeoFeature = { type: "Feature"; geometry: GeoGeometry; properties?: Record<
 
 type FeatureCollection = { type: "FeatureCollection"; features: GeoFeature[] };
 
+type Waypoint = {
+  id: number | string; // string for optimistic
+  route_id: number;
+  user_id?: number | null;
+  name: string;
+  description?: string | null;
+  lat: number;
+  lon: number;
+  type?: string | null;
+  created_at?: string;
+  username?: string;
+};
+
 declare global {
   interface Window {
     L: any; // Leaflet injected via CDN
@@ -198,11 +224,36 @@ async function fetchRouteGeoFC(id: number): Promise<FeatureCollection> {
   return r.json();
 }
 
+async function listWaypointsForRoute(routeId: number): Promise<Waypoint[]> {
+  const r = await fetch(`${API}/api/waypoints/route/${routeId}`, { headers: authHeader() });
+  const j = await r.json();
+  if (!r.ok || j.ok === false) throw new Error(j.error || `Failed waypoints (${r.status})`);
+  return j.items || [];
+}
+
+async function createWaypoint(body: {
+  route_id: number;
+  name: string;
+  lat: number;
+  lon: number;
+  type?: string;
+  description?: string;
+}): Promise<Waypoint> {
+  const r = await fetch(`${API}/api/waypoints`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json();
+  if (!r.ok || j.ok === false) throw new Error(j.error || `Create waypoint failed (${r.status})`);
+  return j.waypoint;
+}
+
 /* ================================= MAIN SHELL ================================= */
 export default function WebApp() {
   const nav = useNavigate();
 
-  // auth guard
+  // auth guard (belt & suspenders in case router missed it)
   useEffect(() => {
     if (!localStorage.getItem("token")) nav("/login", { replace: true });
   }, [nav]);
@@ -361,6 +412,13 @@ function MapScreen({ selected }: { selected: number[] }) {
   const layerRefs = useRef<any[]>([]);
   const [mapReady, setMapReady] = useState(false);
 
+  // waypoints (by route id)
+  const wpsByRouteRef = useRef<Record<number, Waypoint[]>>({});
+  // chooser state
+  const [chooser, setChooser] = useState<null | { x: number; y: number; lat: number; lon: number; routeId: number }>(
+    null
+  );
+
   // load Leaflet + map once
   useEffect(() => {
     const ensureLeaflet = () =>
@@ -423,6 +481,7 @@ function MapScreen({ selected }: { selected: number[] }) {
       // clear previous layers
       layerRefs.current.forEach((lyr) => map.removeLayer(lyr));
       layerRefs.current = [];
+      wpsByRouteRef.current = {};
 
       if (!selected.length) return;
 
@@ -430,15 +489,48 @@ function MapScreen({ selected }: { selected: number[] }) {
 
       for (const id of selected) {
         try {
-          // fetch FeatureCollection and draw directly
+          // 1) fetch FeatureCollection and draw directly (route)
           const fc = await fetchRouteGeoFC(id);
-          const layer = L.geoJSON(fc, { style: { weight: 4, color: "#0ec1ac" } }).addTo(map);
-          layerRefs.current.push(layer);
+          const routeLayer = L.geoJSON(fc, {
+            style: { weight: 4, color: "#0ec1ac" },
+            onEachFeature: (_feature: any, lyr: any) => {
+              lyr.on("click", (e: any) => {
+                const { lat, lng } = e.latlng;
+                const { clientX, clientY } = e.originalEvent || {};
+                setChooser({ x: clientX, y: clientY, lat, lon: lng, routeId: id });
+              });
+            },
+          }).addTo(map);
+          layerRefs.current.push(routeLayer);
 
-          const b = layer.getBounds?.();
+          const b = routeLayer.getBounds?.();
           if (b && b.isValid()) bounds.extend(b);
+
+          // 2) load existing waypoints saved by mobile/backend
+          const wps = await listWaypointsForRoute(id);
+          wpsByRouteRef.current[id] = wps;
+
+          for (const wp of wps) {
+            const mk = L.marker([wp.lat, wp.lon], { icon: iconForType(wp.type || "generic"), title: wp.name })
+              .addTo(map)
+              .bindPopup(
+                `<div style="font-family:system-ui">
+                  <div style="font-weight:700">${escapeHtml(wp.name || wp.type || "Waypoint")}</div>
+                  ${wp.username ? `<div style="color:#6b7a8c;font-size:12px">by ${escapeHtml(wp.username)}</div>` : ""}
+                  ${
+                    wp.description
+                      ? `<div style="margin-top:6px">${escapeHtml(wp.description)}</div>`
+                      : ""
+                  }
+                  <div style="color:#7b8a8c;font-size:12px;margin-top:6px">${wp.lat.toFixed(5)}, ${wp.lon.toFixed(
+                    5
+                  )}</div>
+                </div>`
+              );
+            layerRefs.current.push(mk);
+          }
         } catch (err) {
-          console.warn("Failed to load route", id, err);
+          console.warn("Failed to load route or waypoints", id, err);
         }
       }
 
@@ -446,10 +538,90 @@ function MapScreen({ selected }: { selected: number[] }) {
     })();
   }, [mapReady, selected]);
 
+  // chooser actions
+  async function handlePick(type: string) {
+    if (!chooser || !mapRef.current) return;
+    const L = (window as any).L;
+    const map = mapRef.current;
+    const { lat, lon, routeId } = chooser;
+    setChooser(null);
+
+    // optimistic marker
+    const optimistic: Waypoint = {
+      id: `tmp-${Date.now()}`,
+      route_id: routeId,
+      name: type,
+      lat,
+      lon,
+      type,
+    };
+    const tempMarker = L.marker([lat, lon], {
+      icon: iconForType(type),
+      opacity: 0.7,
+      title: type,
+    })
+      .addTo(map)
+      .bindPopup(`<div style="font-family:system-ui">${type} (saving…)</div>`);
+    layerRefs.current.push(tempMarker);
+
+    try {
+      const saved = await createWaypoint({
+        route_id: routeId,
+        name: type,
+        lat,
+        lon,
+        type,
+      });
+
+      // replace temp popup content
+      tempMarker.setOpacity(1);
+      tempMarker.setPopupContent(
+        `<div style="font-family:system-ui">
+          <div style="font-weight:700">${escapeHtml(saved.name || saved.type || "Waypoint")}</div>
+          <div style="color:#7b8a8c;font-size:12px;margin-top:6px">${saved.lat.toFixed(
+            5
+          )}, ${saved.lon.toFixed(5)}</div>
+        </div>`
+      );
+    } catch (e: any) {
+      // rollback
+      map.removeLayer(tempMarker);
+      alert(e?.message || "Failed to save waypoint");
+    }
+  }
+
   return (
-    <div style={{ position: "relative" }}>
+    <div style={sx.mapWrap}>
       <div ref={containerRef} style={sx.map} />
       {!selected.length && <div style={sx.mapBadge}>Select a route on the Routes tab, then come back here.</div>}
+
+      {chooser && (
+        <div
+          style={{ ...sx.chooser, top: chooser.y, left: chooser.x }}
+          onMouseLeave={() => setChooser(null)}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {["water", "rest", "bathroom", "campsite", "hazard", "landmark"].map((t) => (
+            <button
+              key={t}
+              onClick={() => handlePick(t)}
+              style={{
+                border: "1px solid #e6eaf0",
+                background: "#fff",
+                padding: "6px 10px",
+                borderRadius: 8,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 10, background: colorForType(t) }} />
+              <span style={{ textTransform: "capitalize" }}>{t}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -542,4 +714,34 @@ function TabBtn({
       <span style={{ fontSize: 12 }}>{label}</span>
     </button>
   );
+}
+
+/* ============================ MAP HELPERS ============================ */
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]!));
+}
+
+function colorForType(t: string) {
+  return t === "water"
+    ? "#3b82f6"
+    : t === "rest" || t === "bathroom"
+    ? "#10b981"
+    : t === "campsite"
+    ? "#f59e0b"
+    : t === "hazard"
+    ? "#ef4444"
+    : t === "landmark"
+    ? "#8b5cf6"
+    : "#64748b";
+}
+
+function iconForType(t: string) {
+  const L = (window as any).L;
+  const color = colorForType(t);
+  return L.divIcon({
+    className: "wp-dot",
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35)"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
 }
