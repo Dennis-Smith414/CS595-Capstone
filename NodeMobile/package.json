@@ -25,10 +25,10 @@
     "jwt-decode": "^4.0.0",
     "nodejs-mobile-react-native": "^18.20.4",
     "psql": "^0.0.1",
-    "react": "19.1.0",
+    "react": "^19.1.0",
     "react-native": "^0.81.1",
+    "react-native-config": "^1.5.9",
     "react-native-device-info": "^14.1.1",
-    "react-native-dotenv": "^3.4.11",
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "^2.28.0",
     "react-native-leaflet-view": "^1.1.2",
@@ -61,6 +61,7 @@
     "eslint": "^8.19.0",
     "jest": "^29.7.0",
     "prettier": "2.8.8",
+    "react-native-dotenv": "^3.4.11",
     "typescript": "^5.8.3"
   },
   "engines": {
