@@ -1,27 +1,27 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import styles from "./Login.module.css";
 import logo from "../assets/logo.png";
 import { useNavigate, Link } from "react-router-dom";
 
 const API =
-  (import.meta as unknown as { env?: Record<string, string> })?.env?.VITE_API_BASE ||
-  (window as unknown as { __API_BASE__?: string })?.__API_BASE__ ||
+  (import.meta as any)?.env?.VITE_API_BASE ||
+  (window as any).__API_BASE__ ||
   "http://localhost:5000";
 
 export default function Login() {
-  const [emailOrUsername, setEmailOrUsername] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [showPwd, setShowPwd] = useState<boolean>(false);
+  const [usernameOrEmail, setUsernameOrEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!emailOrUsername || !password) {
-      setError("emailOrUsername and password required");
+    if (!usernameOrEmail || !password) {
+      setError("Please enter a username/email and password.");
       return;
     }
 
@@ -30,29 +30,29 @@ export default function Login() {
       const res = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailOrUsername, password }),
+        // ✅ send a field the backend understands
+        body: JSON.stringify({ usernameOrEmail, password }),
       });
 
-      // Non-2xx -> show API error if present
+      const ct = res.headers.get("content-type") || "";
       const text = await res.text();
-      let json: { ok?: boolean; token?: string; error?: string } = {};
-      try {
-        json = text ? JSON.parse(text) : {};
-      } catch {
-        /* ignore; json stays {} */
+      const data = ct.includes("application/json") ? JSON.parse(text) : {};
+
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `Login failed (${res.status})`);
       }
 
-      if (!res.ok || !json.ok || !json.token) {
-        const msg = json.error || `Login failed (${res.status})`;
-        setError(msg);
-        return;
-      }
+      // ✅ accept either `token` or `accessToken`
+      const token: string | undefined = data.token || data.accessToken;
+      if (!token) throw new Error("Missing token in response");
 
-      // success: persist token and continue
-      localStorage.setItem("token", json.token);
-      navigate("/", { replace: true }); // adjust if your route is different
-    } catch (err) {
-      setError((err as Error).message || "Network error");
+      localStorage.setItem("token", token);
+      if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+
+      // If your app protects "/" with a ProtectedRoute -> WebApp, go there:
+      navigate("/", { replace: true });
+    } catch (err: any) {
+      setError(err?.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -66,15 +66,13 @@ export default function Login() {
 
         <form onSubmit={onSubmit} className={styles.form}>
           <label className={styles.label}>
-            Username
+            Username or Email
             <input
               className={styles.input}
               type="text"
-              value={emailOrUsername}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setEmailOrUsername(e.target.value)
-              }
-              placeholder="email or username"
+              value={usernameOrEmail}
+              onChange={(e) => setUsernameOrEmail(e.target.value)}
+              placeholder="username or email"
               autoComplete="username"
               required
               disabled={loading}
@@ -88,9 +86,7 @@ export default function Login() {
                 className={`${styles.input} ${styles.inputWithToggle}`}
                 type={showPwd ? "text" : "password"}
                 value={password}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setPassword(e.target.value)
-                }
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoComplete="current-password"
                 required
@@ -122,7 +118,12 @@ export default function Login() {
             Create Account
           </button>
 
-          <button type="button" className={styles.Map_button} disabled={loading}>
+          <button
+            type="button"
+            className={styles.Map_button}
+            onClick={() => navigate("/demo-map")}
+            disabled={loading}
+          >
             Demo Map
           </button>
 
