@@ -72,7 +72,7 @@ await run(`
     user_id INT REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
     name VARCHAR(63) NOT NULL,
     description TEXT,
-    created_at TIMESTAMPTZ DEFAULT now(),
+    created_at TIMESTAMPTZ DEFAULT now()
   )
 `);
 /**
@@ -129,15 +129,16 @@ SELECT id, name, ST_AsGeoJSON(geom) AS geojson FROM waypoints;
 
   // GPX
   await run(`
-    CREATE TABLE gpx (
-      id SERIAL PRIMARY KEY,
-      route_id INT REFERENCES routes(id) ON DELETE CASCADE,
-      name TEXT,
-      geometry geometry(LINESTRING, 4326) NOT NULL,
-      file BYTEA NOT NULL,
+    CREATE TABLE IF NOT EXISTS gpx (
+      id         SERIAL PRIMARY KEY,
+      route_id   INT REFERENCES routes(id) ON DELETE CASCADE,
+      name       TEXT,
+      geojson    JSONB,
+      file       BYTEA NOT NULL,
       created_at TIMESTAMPTZ DEFAULT now()
-      )
-    `);
+    )
+  `);
+
 
 }
 

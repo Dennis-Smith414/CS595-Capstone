@@ -1,24 +1,25 @@
 // Server/index.js
 require("dotenv").config({ path: __dirname + "/.env", override: true });
 
-// 1. Add a clear boot-time check for DATABASE_URL
+// Guard: require DB URL
 if (!process.env.DATABASE_URL) {
   console.error("[boot] ❌ No DATABASE_URL found. Check your .env file path and contents.");
   process.exit(1);
 }
-
 console.log("[boot] DATABASE_URL =", process.env.DATABASE_URL);
 
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 
+// Build app
 const PORT = process.env.PORT || 5100;
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+// Quick DB ping (non-fatal in test to avoid noisy exits)
 (async () => {
   try {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -27,11 +28,12 @@ app.use(express.json());
     await pool.end();
   } catch (err) {
     console.error("[boot] ❌ DB connection failed:", err);
-    process.exit(1);   // bail out early if DB is misconfigured
+    // In tests, don't kill the process—Supertest needs the app
+    if (process.env.NODE_ENV !== "test") process.exit(1);
   }
 })();
 
-// Full GPX/Trails router (list, meta, geojson, bbox, upload)
+// Routers (preserves teammates' logic)
 const gpxRoutes = require("./routes/gpx");
 const authRoutes = require("./routes/auth");
 const waypointRoutes = require("./routes/waypoints");
@@ -39,7 +41,7 @@ const userRoutes = require("./routes/users");
 const ratingRoutes = require("./routes/ratings");
 const commentsRoutes = require("./routes/comments");
 
-// mount the routes under /api
+// Mount routes under /api
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/waypoints", waypointRoutes);
@@ -47,11 +49,14 @@ app.use("/api/ratings", ratingRoutes);
 app.use("/api", gpxRoutes);
 app.use("/api/comments", commentsRoutes);
 
-// health
+// Health
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, db: true, startedAt: new Date().toISOString() });
 });
 
-app.listen(PORT, () => console.log(`Backend listening on http://10.0.2.2:${PORT}`));
-//app.listen(PORT, () => console.log(`Backend listening on http://YOUR_IP_HERE:${PORT}`));
+// Only listen when run directly, not when required by tests
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Backend listening on http://localhost:${PORT}`));
+}
 
+module.exports = app; // <-- Supertest imports this

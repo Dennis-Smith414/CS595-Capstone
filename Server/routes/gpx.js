@@ -181,4 +181,41 @@ router.patch("/routes/:id", async (req, res) => {
   }
 });
 
+// --- CREATE A ROUTE ---------------------------------------------------------
+// POST /api/routes
+// body: { slug, name, region? }
+router.post("/routes", async (req, res) => {
+  try {
+    const { slug, name, region } = req.body || {};
+    const isStr = (v) => typeof v === "string" && v.trim().length > 0;
+
+    if (!isStr(slug) || !isStr(name)) {
+      return res.status(400).json({ ok: false, error: "slug and name are required" });
+    }
+
+    const nslug = slug.trim();
+    const nname = name.trim();
+    const nregion = typeof region === "string" && region.trim().length ? region.trim() : null;
+
+    // duplicate slug check (case-insensitive)
+    const dup = await pool.query(`SELECT id FROM routes WHERE LOWER(slug)=LOWER($1)`, [nslug]);
+    if (dup.rowCount) {
+      return res.status(409).json({ ok: false, error: "slug already exists" });
+    }
+
+    const ins = await pool.query(
+      `INSERT INTO routes (slug, name, region)
+       VALUES ($1,$2,$3)
+       RETURNING id, slug, name, region, created_at, updated_at`,
+      [nslug, nname, nregion]
+    );
+
+    return res.json({ ok: true, route: ins.rows[0] });
+  } catch (e) {
+    console.error("POST /routes create failed:", e);
+    return res.status(500).json({ ok: false, error: "server-error" });
+  }
+});
+
+
 module.exports = router;
