@@ -51,6 +51,15 @@ const sx: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: "pointer",
   },
+  primaryAlt: {
+    background: "#6b7a8c",
+    color: "#fff",
+    border: "none",
+    borderRadius: 999,
+    padding: "10px 16px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
   primaryPill: {
     background: "#77c9bd",
     color: "#fff",
@@ -170,6 +179,17 @@ const authHeader = (): Record<string, string> => {
   return t ? { Authorization: `Bearer ${t}` } : {};
 };
 
+const DEBUG_API = false;
+
+async function requestJson(url: string, init: RequestInit) {
+  const res = await fetch(url, init);
+  const ct = res.headers.get("content-type") || "";
+  const raw = await res.text();
+  const json = ct.includes("application/json") ? (raw ? JSON.parse(raw) : {}) : {};
+  if (DEBUG_API) console.log("[requestJson]", { url, status: res.status, ok: res.ok, json, raw: ct ? undefined : raw });
+  return { res, json, raw };
+}
+
 /* ============================ TYPES ============================ */
 type RouteItem = { id: number; slug: string; name: string; region?: string };
 
@@ -182,7 +202,7 @@ type GeoFeature = { type: "Feature"; geometry: GeoGeometry; properties?: Record<
 type FeatureCollection = { type: "FeatureCollection"; features: GeoFeature[] };
 
 type Waypoint = {
-  id: number | string; // string for optimistic
+  id: number | string;
   route_id: number;
   user_id?: number | null;
   name: string;
@@ -192,13 +212,10 @@ type Waypoint = {
   type?: string | null;
   created_at?: string;
   username?: string;
+  votes?: number;
+  vote_count?: number;
+  distance_mi?: number;
 };
-
-declare global {
-  interface Window {
-    L: any; // Leaflet injected via CDN
-  }
-}
 
 /* ============================ API CALLS ============================ */
 async function fetchRouteList(): Promise<RouteItem[]> {
@@ -226,11 +243,12 @@ async function fetchRouteGeoFC(id: number): Promise<FeatureCollection> {
 
 async function listWaypointsForRoute(routeId: number): Promise<Waypoint[]> {
   const r = await fetch(`${API}/api/waypoints/route/${routeId}`, { headers: authHeader() });
-  const j = await r.json();
+  const j = await r.json().catch(() => ({}));
   if (!r.ok || j.ok === false) throw new Error(j.error || `Failed waypoints (${r.status})`);
-  return j.items || [];
+  return j.items || j.waypoints || [];
 }
 
+/** Robust createWaypoint: tries common endpoints + payload keys. */
 async function createWaypoint(body: {
   route_id: number;
   name: string;
@@ -239,21 +257,146 @@ async function createWaypoint(body: {
   type?: string;
   description?: string;
 }): Promise<Waypoint> {
-  const r = await fetch(`${API}/api/waypoints`, {
+  const headers = { "Content-Type": "application/json", ...authHeader() };
+
+  const snake = {
+    route_id: body.route_id, name: body.name, lat: body.lat, lon: body.lon,
+    ...(body.type ? { type: body.type } : {}),
+    ...(body.description ? { description: body.description } : {})
+  };
+  const camel = {
+    routeId: body.route_id, name: body.name, lat: body.lat, lon: body.lon,
+    ...(body.type ? { type: body.type } : {}),
+    ...(body.description ? { description: body.description } : {})
+  };
+
+  const variants: Array<{url:string; payload:any; pick:(j:any)=>Waypoint|null}> = [
+    { url: `${API}/api/waypoints`, payload: snake, pick: (j)=> j?.waypoint ?? j?.item ?? null },
+    { url: `${API}/api/waypoints`, payload: camel, pick: (j)=> j?.waypoint ?? j?.item ?? null },
+    { url: `${API}/api/routes/${body.route_id}/waypoints`, payload: snake, pick: (j)=> j?.waypoint ?? j?.item ?? null },
+    { url: `${API}/api/users/me/waypoints`, payload: snake, pick: (j)=> j?.waypoint ?? j?.item ?? null },
+  ];
+
+  let lastErr: Error | null = null;
+  for (const v of variants) {
+    try {
+      const { res, json } = await requestJson(v.url, { method:"POST", headers, body: JSON.stringify(v.payload) });
+      if (res.status === 404 || res.status === 405) continue;
+      if (!res.ok || json?.ok === false) throw new Error(json?.error || `Create waypoint failed (${res.status})`);
+      const picked = v.pick(json);
+      if (picked) return picked;
+      if (typeof json?.id !== "undefined" && typeof json?.lat !== "undefined" && typeof json?.lon !== "undefined") {
+        return json as Waypoint;
+      }
+      continue;
+    } catch (e:any) {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      continue;
+    }
+  }
+  throw lastErr || new Error("Create waypoint failed (no matching endpoint)");
+}
+
+/** Robust upvote: tries multiple paths and payload keys. */
+// keep your API + authHeader
+const headersJSON = { "Content-Type": "application/json", ...authHeader() };
+
+async function tryJson(url: string, init: RequestInit) {
+  const res = await fetch(url, init);
+  const ct = res.headers.get("content-type") || "";
+  const raw = await res.text();
+  const json = ct.includes("application/json") && raw ? JSON.parse(raw) : {};
+  return { res, json, raw };
+}
+
+/** Tries multiple endpoints/payloads for voting. Returns total votes or null. */
+async function upvoteWaypointResilient(id: number) {
+  const variants = [
+    { url: `${API}/api/ratings/waypoint/${id}`, payload: { value: 1 } }, // singular + value
+    { url: `${API}/api/ratings/waypoints/${id}`, payload: { value: 1 } }, // plural + value
+    { url: `${API}/api/ratings/waypoint/${id}`, payload: { val: 1 } },    // singular + val
+    { url: `${API}/api/waypoints/${id}/rate`, payload: { value: 1 } },    // alt path
+    { url: `${API}/api/ratings`, payload: { waypoint_id: id, value: 1 } } // flat collection
+  ];
+
+  let lastErr: any = null;
+  for (const v of variants) {
+    try {
+      const { res, json } = await tryJson(v.url, {
+        method: "POST",
+        headers: headersJSON,
+        body: JSON.stringify(v.payload),
+      });
+      if (res.status === 404 || res.status === 405) continue;
+      if (!res.ok || json?.ok === false) throw new Error(json?.error || `Vote failed (${res.status})`);
+      console.info("[upvoteWaypoint] using", v.url);
+      return typeof json?.votes === "number"
+        ? json.votes
+        : typeof json?.vote_count === "number"
+        ? json.vote_count
+        : null;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Vote failed (no matching endpoint)");
+}
+
+/** Tries multiple create-waypoint variants and returns the created waypoint. */
+async function createWaypointResilient(body: {
+  route_id: number; name: string; lat: number; lon: number; type?: string; description?: string;
+}) {
+  const snake = { route_id: body.route_id, name: body.name, lat: body.lat, lon: body.lon, ...(body.type ? {type: body.type}:{}), ...(body.description ? {description: body.description}:{}) };
+  const camel = { routeId: body.route_id, name: body.name, lat: body.lat, lon: body.lon, ...(body.type ? {type: body.type}:{}), ...(body.description ? {description: body.description}:{}) };
+
+  const variants = [
+    { url: `${API}/api/waypoints`, payload: snake },
+    { url: `${API}/api/waypoints`, payload: camel },
+    { url: `${API}/api/routes/${body.route_id}/waypoints`, payload: snake },
+    { url: `${API}/api/routes/${body.route_id}/waypoints`, payload: camel },
+  ];
+
+  let lastErr: any = null;
+  for (const v of variants) {
+    try {
+      const { res, json } = await tryJson(v.url, {
+        method: "POST",
+        headers: headersJSON,
+        body: JSON.stringify(v.payload),
+      });
+      if (res.status === 404 || res.status === 405) continue;
+      if (!res.ok || json?.ok === false) throw new Error(json?.error || `Create waypoint failed (${res.status})`);
+      const wp = json?.waypoint ?? json?.item ?? json;
+      if (wp?.lat != null && wp?.lon != null) {
+        console.info("[createWaypoint] using", v.url);
+        return wp;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Create waypoint failed (no matching endpoint)");
+}
+
+
+/** Upload GPX to create/update a route. */
+async function uploadRouteGPX(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { res, json, raw } = await requestJson(`${API}/api/routes/upload`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeader() },
-    body: JSON.stringify(body),
+    headers: { ...authHeader() }, // DO NOT set Content-Type; browser will
+    body: fd as any,
   });
-  const j = await r.json();
-  if (!r.ok || j.ok === false) throw new Error(j.error || `Create waypoint failed (${r.status})`);
-  return j.waypoint;
+  if (!res.ok || json?.ok === false) throw new Error(json?.error || `Upload failed (${res.status})`);
+  // expected: { ok:true, id, slug, name }
+  return json as { ok: true; id: number; slug: string; name: string; region?: string };
 }
 
 /* ================================= MAIN SHELL ================================= */
 export default function WebApp() {
   const nav = useNavigate();
 
-  // auth guard (belt & suspenders in case router missed it)
   useEffect(() => {
     if (!localStorage.getItem("token")) nav("/login", { replace: true });
   }, [nav]);
@@ -267,13 +410,7 @@ export default function WebApp() {
     <div style={sx.app}>
       <div style={sx.header}>
         <h1 style={sx.h1}>
-          {tab === "routes"
-            ? "Select Routes"
-            : tab === "map"
-            ? "Map"
-            : tab === "account"
-            ? "My Account"
-            : "File Manager"}
+          {tab === "routes" ? "Select Routes" : tab === "map" ? "Map" : tab === "account" ? "My Account" : "File Manager"}
         </h1>
       </div>
 
@@ -315,27 +452,46 @@ function RoutesScreen({
 }) {
   const [routes, setRoutes] = useState<RouteItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState<string>("");
   const [q, setQ] = useState("");
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function loadRoutes() {
+    setLoading(true);
+    setErr("");
+    try {
+      const list = await fetchRouteList();
+      setRoutes(list);
+    } catch (e: any) {
+      setErr(e?.message || "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      setErr("");
-      try {
-        const list = await fetchRouteList();
-        if (alive) setRoutes(list);
-      } catch (e: any) {
-        if (alive) setErr(e.message || "Failed to load");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    void loadRoutes();
   }, []);
+
+  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const created = await uploadRouteGPX(file);
+      setRoutes((prev) => [
+        { id: created.id, slug: created.slug, name: created.name, region: created.region },
+        ...prev,
+      ]);
+      alert(`Uploaded: ${created.name}`);
+    } catch (err: any) {
+      alert(err?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -350,22 +506,41 @@ function RoutesScreen({
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".gpx,application/gpx+xml"
+        style={{ display: "none" }}
+        onChange={onPickFile}
+      />
+
       <div style={{ display: "flex", gap: 12 }}>
-        <button style={sx.primaryPill} onClick={() => alert("Upload Route (wire this to backend)")}>
-          + Create / Upload Route
+        <button
+          style={sx.primaryPill}
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          title="Upload a .gpx file to create/update a route"
+        >
+          {uploading ? "Uploading…" : "+ Upload GPX"}
         </button>
+
         <input
           placeholder="Search routes…"
           value={q}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQ(e.target.value)}
           style={sx.search}
         />
+
         <button
           onClick={onShowMap}
           disabled={selected.length === 0}
           style={{ ...sx.primary, opacity: selected.length ? 1 : 0.6 }}
         >
           Show on Map
+        </button>
+
+        <button onClick={loadRoutes} style={sx.primaryAlt} aria-label="Refresh route list">
+          Refresh
         </button>
       </div>
 
@@ -412,14 +587,11 @@ function MapScreen({ selected }: { selected: number[] }) {
   const layerRefs = useRef<any[]>([]);
   const [mapReady, setMapReady] = useState(false);
 
-  // waypoints (by route id)
-  const wpsByRouteRef = useRef<Record<number, Waypoint[]>>({});
-  // chooser state
   const [chooser, setChooser] = useState<null | { x: number; y: number; lat: number; lon: number; routeId: number }>(
     null
   );
 
-  // load Leaflet + map once
+  // load Leaflet via CDN
   useEffect(() => {
     const ensureLeaflet = () =>
       new Promise<void>((resolve) => {
@@ -460,6 +632,7 @@ function MapScreen({ selected }: { selected: number[] }) {
 
       map.setView([37.7749, -122.4194], 12);
       setMapReady(true);
+      ensureWaypointCSS();
     });
 
     return () => {
@@ -469,7 +642,7 @@ function MapScreen({ selected }: { selected: number[] }) {
     };
   }, []);
 
-  // draw (or re-draw) when map becomes ready OR selection changes
+  // draw on selection
   useEffect(() => {
     if (!mapReady) return;
 
@@ -478,10 +651,8 @@ function MapScreen({ selected }: { selected: number[] }) {
       const map = mapRef.current;
       if (!L || !map) return;
 
-      // clear previous layers
       layerRefs.current.forEach((lyr) => map.removeLayer(lyr));
       layerRefs.current = [];
-      wpsByRouteRef.current = {};
 
       if (!selected.length) return;
 
@@ -489,7 +660,7 @@ function MapScreen({ selected }: { selected: number[] }) {
 
       for (const id of selected) {
         try {
-          // 1) fetch FeatureCollection and draw directly (route)
+          // draw route
           const fc = await fetchRouteGeoFC(id);
           const routeLayer = L.geoJSON(fc, {
             style: { weight: 4, color: "#0ec1ac" },
@@ -506,27 +677,14 @@ function MapScreen({ selected }: { selected: number[] }) {
           const b = routeLayer.getBounds?.();
           if (b && b.isValid()) bounds.extend(b);
 
-          // 2) load existing waypoints saved by mobile/backend
+          // waypoints
           const wps = await listWaypointsForRoute(id);
-          wpsByRouteRef.current[id] = wps;
-
           for (const wp of wps) {
             const mk = L.marker([wp.lat, wp.lon], { icon: iconForType(wp.type || "generic"), title: wp.name })
               .addTo(map)
-              .bindPopup(
-                `<div style="font-family:system-ui">
-                  <div style="font-weight:700">${escapeHtml(wp.name || wp.type || "Waypoint")}</div>
-                  ${wp.username ? `<div style="color:#6b7a8c;font-size:12px">by ${escapeHtml(wp.username)}</div>` : ""}
-                  ${
-                    wp.description
-                      ? `<div style="margin-top:6px">${escapeHtml(wp.description)}</div>`
-                      : ""
-                  }
-                  <div style="color:#7b8a8c;font-size:12px;margin-top:6px">${wp.lat.toFixed(5)}, ${wp.lon.toFixed(
-                    5
-                  )}</div>
-                </div>`
-              );
+              .bindPopup(waypointPopupHTML(wp));
+
+            mk.on("popupopen", (e: any) => wirePopupHandlers(e, wp));
             layerRefs.current.push(mk);
           }
         } catch (err) {
@@ -538,7 +696,7 @@ function MapScreen({ selected }: { selected: number[] }) {
     })();
   }, [mapReady, selected]);
 
-  // chooser actions
+  // pick type and create waypoint
   async function handlePick(type: string) {
     if (!chooser || !mapRef.current) return;
     const L = (window as any).L;
@@ -546,45 +704,22 @@ function MapScreen({ selected }: { selected: number[] }) {
     const { lat, lon, routeId } = chooser;
     setChooser(null);
 
-    // optimistic marker
-    const optimistic: Waypoint = {
-      id: `tmp-${Date.now()}`,
-      route_id: routeId,
-      name: type,
-      lat,
-      lon,
-      type,
-    };
     const tempMarker = L.marker([lat, lon], {
       icon: iconForType(type),
       opacity: 0.7,
       title: type,
     })
       .addTo(map)
-      .bindPopup(`<div style="font-family:system-ui">${type} (saving…)</div>`);
+      .bindPopup(`<div style="font-family:system-ui">${escapeHtml(type)} (saving…)</div>`);
     layerRefs.current.push(tempMarker);
 
     try {
-      const saved = await createWaypoint({
-        route_id: routeId,
-        name: type,
-        lat,
-        lon,
-        type,
-      });
-
-      // replace temp popup content
+      const saved = await createWaypoint({ route_id: routeId, name: type, lat, lon, type });
       tempMarker.setOpacity(1);
-      tempMarker.setPopupContent(
-        `<div style="font-family:system-ui">
-          <div style="font-weight:700">${escapeHtml(saved.name || saved.type || "Waypoint")}</div>
-          <div style="color:#7b8a8c;font-size:12px;margin-top:6px">${saved.lat.toFixed(
-            5
-          )}, ${saved.lon.toFixed(5)}</div>
-        </div>`
-      );
+      tempMarker.setPopupContent(waypointPopupHTML(saved));
+      tempMarker.off("popupopen");
+      tempMarker.on("popupopen", (e: any) => wirePopupHandlers(e, saved));
     } catch (e: any) {
-      // rollback
       map.removeLayer(tempMarker);
       alert(e?.message || "Failed to save waypoint");
     }
@@ -616,7 +751,15 @@ function MapScreen({ selected }: { selected: number[] }) {
                 gap: 6,
               }}
             >
-              <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 10, background: colorForType(t) }} />
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 10,
+                  height: 10,
+                  borderRadius: 10,
+                  background: colorForType(t),
+                }}
+              />
               <span style={{ textTransform: "capitalize" }}>{t}</span>
             </button>
           ))}
@@ -627,7 +770,6 @@ function MapScreen({ selected }: { selected: number[] }) {
 }
 
 function AccountScreen({ onLogout }: { onLogout: () => void }) {
-  // (placeholder until /api/auth/me is wired)
   const [me] = useState({ username: "DemoUser", email: "demo@example.com" });
 
   return (
@@ -716,9 +858,141 @@ function TabBtn({
   );
 }
 
-/* ============================ MAP HELPERS ============================ */
+/* ============================ POPUP + MAP HELPERS ============================ */
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]!));
+}
+
+function ensureWaypointCSS() {
+  const id = "wp-popup-css";
+  if (document.getElementById(id)) return;
+  const css = `
+  .wp-card { display:grid; grid-template-columns: 1fr auto; gap:8px; padding:10px; border-radius:12px; }
+  .wp-left { display:grid; gap:4px; min-width:220px; }
+  .wp-title { font-weight:800; font-size:14px; color:#0f172a; margin:0; }
+  .wp-desc { font-size:12px; color:#475569; line-height:1.3; max-width:280px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .wp-footer { font-size:11px; color:#64748b; margin-top:4px; }
+  .wp-right { display:grid; align-content:center; justify-items:center; gap:4px; padding-left:10px; }
+  .wp-up { background:#e2f8f5; border:1px solid #0ec1ac; color:#0ec1ac; width:28px; height:28px; border-radius:6px; display:grid; place-items:center; cursor:pointer; }
+  .wp-up:hover { background:#d6f4f0; }
+  .wp-count { font-weight:800; font-size:12px; color:#0f172a; }
+  .wp-avatar { width:18px; height:18px; border-radius:999px; display:inline-grid; place-items:center; background:#f1f5f9; margin-right:6px; font-size:12px; }
+  `;
+  const el = document.createElement("style");
+  el.id = id;
+  el.textContent = css;
+  document.head.appendChild(el);
+}
+
+function fmtDate(iso?: string) {
+  try {
+    return iso ? new Date(iso).toLocaleDateString() : "";
+  } catch {
+    return "";
+  }
+}
+function shortDesc(s?: string | null) {
+  if (!s) return "";
+  const t = String(s).trim();
+  return t.length > 160 ? t.slice(0, 157) + "…" : t;
+}
+function emojiForType(t?: string | null) {
+  const k = (t || "").toLowerCase();
+  if (k.includes("water")) return "💧";
+  if (k.includes("rest") || k.includes("bath")) return "🚻";
+  if (k.includes("camp")) return "🏕️";
+  if (k.includes("hazard")) return "⚠️";
+  if (k.includes("landmark")) return "📍";
+  return "🚶";
+}
+function waypointPopupHTML(wp: any) {
+  const name = wp.name || wp.type || "Waypoint";
+  const desc = shortDesc(wp.description);
+  const date = fmtDate(wp.created_at);
+  const who = wp.username ? ` • ${wp.username}` : "";
+  const dist = wp.distance_mi ? ` • ${Number(wp.distance_mi).toFixed(2)} mi` : "";
+  const vote = Number(wp.votes || wp.vote_count || 0);
+
+  return `
+    <div class="wp-card" data-wp-id="${wp.id}">
+      <div class="wp-left">
+        <div class="wp-title">${escapeHtml(name)}</div>
+        ${desc ? `<div class="wp-desc">${escapeHtml(desc)}</div>` : ""}
+        <div class="wp-footer">
+          <span class="wp-avatar">${emojiForType(wp.type)}</span>
+          ${date}${who}${dist}
+        </div>
+      </div>
+      <div class="wp-right">
+        <button class="wp-up" title="Upvote" data-action="upvote">⬆</button>
+        <div class="wp-count" data-role="count">${vote}</div>
+      </div>
+    </div>
+  `;
+}
+
+/** Attach handlers when a popup opens. */
+function wirePopupHandlers(e: any, wp: Waypoint) {
+  const container: HTMLElement | null = e?.popup?.getElement?.() || null;
+  if (!container) return;
+
+  // add inline comment form (once)
+  if (!container.querySelector("[data-role='cform']")) {
+    const form = document.createElement("div");
+    form.setAttribute("data-role", "cform");
+    form.innerHTML = `
+      <div style="display:grid; gap:6px; margin-top:8px;">
+        <textarea rows="2" placeholder="Add a comment…" style="resize:vertical; border:1px solid #e6eaf0; border-radius:8px; padding:6px;"></textarea>
+        <button data-action="comment" style="justify-self:end; border:1px solid #0ec1ac; background:#0ec1ac; color:#fff; border-radius:8px; padding:6px 10px; cursor:pointer;">Post</button>
+      </div>`;
+    container.querySelector(".wp-left")?.appendChild(form);
+  }
+
+  // upvote
+  const upBtn = container.querySelector("[data-action='upvote']") as HTMLButtonElement | null;
+  const countEl = container.querySelector("[data-role='count']") as HTMLElement | null;
+  upBtn?.addEventListener(
+    "click",
+    async () => {
+      if (!upBtn) return;
+      upBtn.disabled = true;
+      try {
+        const total = await upvoteWaypoint(Number(wp.id));
+        if (countEl) {
+          countEl.textContent =
+            typeof total === "number" ? String(total) : String(Number(countEl.textContent || "0") + 1);
+        }
+      } catch (err: any) {
+        alert(err?.message || "Vote failed");
+      } finally {
+        upBtn.disabled = false;
+      }
+    },
+    { once: true }
+  );
+
+  // comment
+  const postBtn = container.querySelector("[data-action='comment']") as HTMLButtonElement | null;
+  const textarea = container.querySelector("textarea") as HTMLTextAreaElement | null;
+  postBtn?.addEventListener(
+    "click",
+    async () => {
+      const text = (textarea?.value || "").trim();
+      if (!text) return;
+      if (!postBtn) return;
+      postBtn.disabled = true;
+      try {
+        await addWaypointComment(Number(wp.id), text);
+        if (textarea) textarea.value = "";
+        postBtn.textContent = "Posted!";
+        setTimeout(() => (postBtn.textContent = "Post"), 900);
+      } catch (err: any) {
+        alert(err?.message || "Comment failed");
+        postBtn.disabled = false;
+      }
+    },
+    { once: true }
+  );
 }
 
 function colorForType(t: string) {
@@ -734,7 +1008,6 @@ function colorForType(t: string) {
     ? "#8b5cf6"
     : "#64748b";
 }
-
 function iconForType(t: string) {
   const L = (window as any).L;
   const color = colorForType(t);

@@ -17,46 +17,59 @@ export default function Login() {
   const navigate = useNavigate();
 
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+  e.preventDefault();
+  setError(null);
 
-    if (!usernameOrEmail || !password) {
-      setError("Please enter a username/email and password.");
-      return;
-    }
+  const u = usernameOrEmail.trim();
+  const p = password;
 
-    setLoading(true);
-    try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // ✅ send a field the backend understands
-        body: JSON.stringify({ usernameOrEmail, password }),
-      });
-
-      const ct = res.headers.get("content-type") || "";
-      const text = await res.text();
-      const data = ct.includes("application/json") ? JSON.parse(text) : {};
-
-      if (!res.ok || data.ok === false) {
-        throw new Error(data.error || `Login failed (${res.status})`);
-      }
-
-      // ✅ accept either `token` or `accessToken`
-      const token: string | undefined = data.token || data.accessToken;
-      if (!token) throw new Error("Missing token in response");
-
-      localStorage.setItem("token", token);
-      if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
-
-      // If your app protects "/" with a ProtectedRoute -> WebApp, go there:
-      navigate("/", { replace: true });
-    } catch (err: any) {
-      setError(err?.message || "Login failed");
-    } finally {
-      setLoading(false);
-    }
+  if (!u || !p) {
+    setError("Please enter a username/email and password.");
+    return;
   }
+
+  // Build the shape your backend understands
+  const body: Record<string, string> = { password: p };
+  if (u.includes("@")) body.email = u;
+  else body.username = u;
+
+  setLoading(true);
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const ct = res.headers.get("content-type") || "";
+    const text = await res.text();
+    let data: any = {};
+    try {
+      data = ct.includes("application/json") && text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(`Bad JSON from /auth/login: ${text.slice(0, 200)}`);
+    }
+
+    // handle non-OKs AND explicit { ok:false }
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.error || `Login failed (${res.status})`);
+    }
+
+    // accept either token or accessToken
+    const token: string | undefined = data.token || data.accessToken;
+    if (!token) throw new Error("Missing token in response");
+
+    localStorage.setItem("token", token);
+    if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
+
+    navigate("/", { replace: true });
+  } catch (err: any) {
+    setError(err?.message || "Login failed");
+  } finally {
+    setLoading(false);
+  }
+}
+
 
   return (
     <div className={styles.page}>
