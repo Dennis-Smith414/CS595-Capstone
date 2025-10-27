@@ -63,14 +63,6 @@ function emojiForType(t?: string | null) {
   if (k.includes("landmark")) return "📍";
   return "🚶";
 }
-function iconForType(color: string) {
-  return L.divIcon({
-    className: "wp-dot",
-    html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35)"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-  });
-}
 function colorForType(t: string) {
   return t === "water"
     ? "#3b82f6"
@@ -84,8 +76,16 @@ function colorForType(t: string) {
     ? "#8b5cf6"
     : "#64748b";
 }
+function iconForType(color: string) {
+  return L.divIcon({
+    className: "wp-dot",
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35)"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
 
-/* ============================ API SHAPES ============================ */
+/* ============================ TYPES ============================ */
 type GeoGeometry =
   | { type: "LineString"; coordinates: number[][] }
   | { type: "MultiLineString"; coordinates: number[][][] };
@@ -106,68 +106,40 @@ type Waypoint = {
   distance_mi?: number;
 };
 
-/* ============================ BACKEND CALLS (resilient) ============================ */
-/** Try common endpoint shapes for voting; return new total or null. */
-async function upvoteWaypoint(id: number) {
-  const variants = [
-    { url: `${API}/api/ratings/waypoint/${id}`, payload: { value: 1 } },
-    { url: `${API}/api/ratings/waypoints/${id}`, payload: { value: 1 } },
-    { url: `${API}/api/ratings/waypoint/${id}`, payload: { val: 1 } },
-    { url: `${API}/api/waypoints/${id}/rate`, payload: { value: 1 } },
-    { url: `${API}/api/ratings`, payload: { waypoint_id: id, value: 1 } },
-  ];
-  let lastErr: any = null;
-  for (const v of variants) {
-    try {
-      const res = await fetch(v.url, { method: "POST", headers: headersJSON, body: JSON.stringify(v.payload) });
-      const ct = res.headers.get("content-type") || "";
-      const text = await res.text();
-      const json = ct.includes("application/json") && text ? JSON.parse(text) : {};
-      if (res.status === 404 || res.status === 405) continue; // try next
-      if (!res.ok || json?.ok === false) throw new Error(json?.error || `Vote failed (${res.status})`);
-      return typeof json?.votes === "number" ? json.votes :
-             typeof json?.vote_count === "number" ? json.vote_count : null;
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr || new Error("Vote failed");
+/* ============================ RATINGS (server-compatible) ============================ */
+// Cache to avoid flicker & extra requests while the map is open
+const voteCache = new Map<number, number>();
+
+/** GET persisted total from server (ratings.js) */
+async function getWaypointRating(id: number): Promise<number> {
+  const res = await fetch(`${API}/api/ratings/waypoint/${id}`, { headers: { ...authHeader() } });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.ok === false) throw new Error(json?.error || `Rating fetch failed (${res.status})`);
+  return Number(json.total ?? 0);
 }
 
-/** Try common shapes for posting a comment. */
-async function postComment(waypointId: number, text: string) {
-  const variants = [
-    { url: `${API}/api/waypoints/${waypointId}/comments`, payload: { text } },
-    { url: `${API}/api/comments`, payload: { waypoint_id: waypointId, text } },
-    { url: `${API}/api/waypoint/${waypointId}/comments`, payload: { body: text } },
-  ];
-  let lastErr: any = null;
-  for (const v of variants) {
-    try {
-      const res = await fetch(v.url, { method: "POST", headers: headersJSON, body: JSON.stringify(v.payload) });
-      const ct = res.headers.get("content-type") || "";
-      const textBody = await res.text();
-      const json = ct.includes("application/json") && textBody ? JSON.parse(textBody) : {};
-      if (res.status === 404 || res.status === 405) continue;
-      if (!res.ok || json?.ok === false) throw new Error(json?.error || `Comment failed (${res.status})`);
-      return json;
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr || new Error("Comment failed");
-}
-
-/* ===== TEMP global shims so any lingering inline handlers don’t explode ===== */
-if (typeof window !== "undefined") {
-  (window as any).upvoteWaypoint = async (id: number) => upvoteWaypoint(Number(id));
-  (window as any).postWaypointComment = async (id: number, text: string) => postComment(Number(id), text);
+/** POST upvote (val:1) to server (ratings.js) */
+async function postUpvote(id: number): Promise<number> {
+  const res = await fetch(`${API}/api/ratings/waypoint/${id}`, {
+    method: "POST",
+    headers: headersJSON,
+    body: JSON.stringify({ val: 1 }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.ok === false) throw new Error(json?.error || `Vote failed (${res.status})`);
+  return Number(json.total ?? 0);
 }
 
 /* ============================ POPUP TEMPLATE ============================ */
-function waypointPopupHTML(wp: Waypoint) {
+function waypointPopupHTML(wp: Waypoint, count?: number) {
   const name = wp.name || wp.type || "Waypoint";
   const desc = shortDesc(wp.description);
   const date = fmtDate(wp.created_at);
   const who = wp.username ? `• ${wp.username}` : "";
   const dist = wp.distance_mi ? `• ${Number(wp.distance_mi).toFixed(2)} mi` : "";
-  const vote = Number(wp.votes ?? wp.vote_count ?? 0);
+  const vote = Number.isFinite(count as number)
+    ? Number(count)
+    : Number((wp as any).votes ?? (wp as any).vote_count ?? "");
 
   return `
     <div class="wp-card" data-wp-id="${wp.id}">
@@ -185,7 +157,7 @@ function waypointPopupHTML(wp: Waypoint) {
       </div>
       <div class="wp-right">
         <button class="wp-up" title="Upvote" data-action="upvote">⬆</button>
-        <div class="wp-count" data-role="count">${vote}</div>
+        <div class="wp-count" data-role="count">${Number.isFinite(vote) ? vote : "—"}</div>
       </div>
     </div>
   `;
@@ -279,12 +251,34 @@ export default function RouteView() {
             title: wp.name || wp.type || "Waypoint",
           }).addTo(wpGroup);
 
-          mk.bindPopup(waypointPopupHTML(wp), { maxWidth: 380, minWidth: 280, closeButton: true });
+          // Use any cached count when binding popup (avoids flicker)
+          const cached = voteCache.get(Number(wp.id));
+          mk.bindPopup(waypointPopupHTML(wp, cached), { maxWidth: 380, minWidth: 280, closeButton: true });
 
-          // Delegated handlers (no globals)
-          mk.on("popupopen", (e: any) => {
+          // Delegated handlers + on-open refresh
+          mk.on("popupopen", async (e: any) => {
             const container: HTMLElement | null = e.popup?._container || null;
             if (!container) return;
+
+            // Always refresh persisted total when opening
+            try {
+              const latest = await getWaypointRating(Number(wp.id));
+              voteCache.set(Number(wp.id), latest);
+
+              // update DOM now
+              const countEl = container.querySelector('[data-role="count"]') as HTMLElement | null;
+              if (countEl) countEl.textContent = String(latest);
+
+              // refresh the popup’s cached HTML so the next open is correct
+              const p = mk.getPopup();
+              if (p) p.setContent(waypointPopupHTML(wp, latest));
+
+              // keep it on the model too
+              (wp as any).votes = latest;
+              (wp as any).vote_count = latest;
+            } catch {
+              // ignore; show whatever was displayed
+            }
 
             const onClick = async (ev: Event) => {
               const target = ev.target as HTMLElement;
@@ -294,21 +288,17 @@ export default function RouteView() {
               if (upBtn) {
                 const countEl = container.querySelector('[data-role="count"]') as HTMLElement | null;
                 const old = Number(countEl?.textContent || 0);
-                if (countEl) countEl.textContent = String(old + 1);
+                if (countEl) countEl.textContent = String(old + 1); // optimistic
                 upBtn.disabled = true;
 
                 try {
-                  const newTotal = await upvoteWaypoint(Number(wp.id));
-                  const finalTotal = typeof newTotal === "number" ? newTotal : old + 1;
-
-                  // persist to model + popup cache
-                  wp.votes = finalTotal;
-                  wp.vote_count = finalTotal;
-                  if (countEl) countEl.textContent = String(finalTotal);
-
-                  // update popup content Leaflet caches for next open
+                  const newTotal = await postUpvote(Number(wp.id));
+                  voteCache.set(Number(wp.id), newTotal);
+                  if (countEl) countEl.textContent = String(newTotal);
+                  (wp as any).votes = newTotal;
+                  (wp as any).vote_count = newTotal;
                   const p = mk.getPopup();
-                  if (p) p.setContent(waypointPopupHTML(wp));
+                  if (p) p.setContent(waypointPopupHTML(wp, newTotal));
                 } catch (err: any) {
                   if (countEl) countEl.textContent = String(old);
                   alert(err?.message || "Vote failed");
@@ -318,28 +308,17 @@ export default function RouteView() {
                 return;
               }
 
-              // Post Comment
+              // Comment (placeholder – wire up when ready)
               const postBtn = target.closest('button[data-action="post-comment"]') as HTMLButtonElement | null;
               if (postBtn) {
                 const textarea = container.querySelector('[data-role="comment"]') as HTMLTextAreaElement | null;
                 const message = (textarea?.value || "").trim();
                 if (!message) return;
-
                 postBtn.disabled = true;
                 const oldLabel = postBtn.textContent || "Post";
-                postBtn.textContent = "Posting…";
-                try {
-                  await postComment(Number(wp.id), message);
-                  // clear + acknowledge
-                  if (textarea) textarea.value = "";
-                  postBtn.textContent = "Posted";
-                  setTimeout(() => (postBtn.textContent = oldLabel), 800);
-                } catch (err: any) {
-                  alert(err?.message || "Comment failed");
-                  postBtn.textContent = oldLabel;
-                } finally {
-                  postBtn.disabled = false;
-                }
+                postBtn.textContent = "Posted";
+                setTimeout(() => (postBtn.textContent = oldLabel), 800);
+                postBtn.disabled = false;
               }
             };
 

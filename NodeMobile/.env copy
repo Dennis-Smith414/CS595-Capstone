@@ -1,0 +1,3 @@
+DATABASE_URL=postgresql://neondb_owner:npg_zWdLnPS67DNy@ep-snowy-leaf-a8w4krkw-pooler.eastus2.azure.neon.tech/neondb?sslmode=require
+PORT=5000
+API_BASE=http://10.0.2.2:5000
