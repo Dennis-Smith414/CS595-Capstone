@@ -1,6 +1,6 @@
 import React, { ReactNode } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation } from "react-native";
-import { colors } from "../../styles/theme";
+import { useThemeStyles, fonts } from "../../styles/theme";
 import { Card } from "../common/Card";
 
 interface AccountSectionProps {
@@ -16,6 +16,8 @@ export const AccountSection: React.FC<AccountSectionProps> = ({
   onToggle,
   children,
 }) => {
+  const { colors } = useThemeStyles();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   return (
     <Card>
       <TouchableOpacity
@@ -35,7 +37,7 @@ export const AccountSection: React.FC<AccountSectionProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (colors : any) => StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

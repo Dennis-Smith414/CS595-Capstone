@@ -52,7 +52,7 @@ export const darkColors: Palette = {
   primary: "#40E0D0",
   secondary: "#00A3A3",
   accent: "#6FB0B5",
-  background: "#0F1214",
+  background: "#101214ff",
   backgroundAlt: "#1A1F23",
   textPrimary: "#EAEAEA",
   textSecondary: "#A6A6A6",

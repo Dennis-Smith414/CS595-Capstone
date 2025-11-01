@@ -9,7 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
-import { baseStyles, colors } from "../styles/theme";
+import { useThemeStyles } from "../styles/theme";
 import { useAuth } from "../context/AuthContext";
 //import { API_BASE } from "../lib/api";
 import { API_BASE } from "../config/env";
@@ -25,6 +25,8 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 export default function AccountScreen({ navigation }: any) {
+  const { colors, styles: baseStyles } = useThemeStyles(); // follows System or your override
+
   const { userToken } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [expanded, setExpanded] = useState({
