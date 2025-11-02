@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { baseStyles, colors } from "../styles/theme";
+//import { baseStyles, colors } from "../styles/theme";
+import { globalStyles, theme } from '../styles/globalStyles'; // <-- NEW IMPORT
 import { useAuth } from "../context/AuthContext";
 //import { API_BASE } from "../lib/api";
 import { API_BASE } from "../config/env";
@@ -230,11 +231,11 @@ const handleDeleteComment = async (id: number) => {
 
 return (
   <ScrollView
-    style={{ flex: 1, backgroundColor: colors.background }}
+    style={{ flex: 1, backgroundColor: theme.colors.background }}
     contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
     showsVerticalScrollIndicator={false}
   >
-    <Text style={[baseStyles.headerText, styles.pageTitle]}>My Account</Text>
+    <Text style={[globalStyles.headerText, globalStyles.pageTitle]}>My Account</Text>
 
     {/* Basic Info */}
     <Card>
@@ -380,28 +381,14 @@ return (
         ) : (
           <EmptyState title="No comments" subtitle="Nothing matches your search." />
         )}
-
       </AccountSection>
 
       <TouchableOpacity
-        style={[baseStyles.button, baseStyles.buttonSecondary, styles.settingsButton]}
+        style={[globalStyles.button, globalStyles.buttonSecondary, globalStyles.settingsButton]}
         onPress={() => navigation.navigate("Settings")}
       >
-        <Text style={baseStyles.buttonText}>Settings</Text>
+        <Text style={globalStyles.buttonText}>Settings</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  pageTitle: {
-    marginBottom: 24,
-    textAlign: "center",
-  },
-
-    settingsButton: {
-      marginTop: 24,
-      alignSelf: "center",
-    },
-
-});
