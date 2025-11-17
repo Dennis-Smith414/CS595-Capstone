@@ -2,10 +2,12 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+//import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import { Image, View, ActivityIndicator } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useThemeStyles } from "../styles/theme"; // ← ADD
+import { CustomTabBar } from "./CustomTabBar";
 
 // Screens
 import AccountCreationScreen from "../screens/AccountCreationScreen";
@@ -22,7 +24,7 @@ import WaypointEditScreen from "../screens/WaypointEditScreen";
 
 // Navigators
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Tab = createMaterialTopTabNavigator();
 
 const AccountStackNav = createNativeStackNavigator();
 const MapStackNav = createNativeStackNavigator();
@@ -76,25 +78,15 @@ function RoutesStack() {
    Main Tab Navigator
 ---------------------------- */
 function MainTabs() {
-  const { colors: c } = useThemeStyles(); // ← ADD
+  //const { colors: c } = useThemeStyles(); // ← ADD
 
   return (
     <Tab.Navigator
       initialRouteName="Account"
       backBehavior="history"
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: c.backgroundAlt,   // ← THEMED
-          borderTopWidth: 1,
-          borderTopColor: c.border,           // ← THEMED
-          height: 80,
-          paddingTop: 15,
-        },
-        tabBarShowLabel: false,
-        tabBarActiveTintColor: c.primary,     // ← THEMED
-        tabBarInactiveTintColor: c.textSecondary, // ← THEMED
-      }}
+      tabBarPosition="bottom"
+
+      tabBar={props => <CustomTabBar{...props} />}
     >
       <Tab.Screen
         name="Routes"
