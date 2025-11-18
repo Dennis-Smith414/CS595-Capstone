@@ -42,7 +42,19 @@ if (
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
 type DatePreset = "all" | "7" | "30" | "365";
+
+// 🔹 simple shape for routes we use in this screen
+type UserRoute = {
+  id: number;
+  name: string;
+  region?: string | null;
+  description?: string | null;
+  created_at?: string | null;
+  create_time?: string | null;
+  createdAt?: string | null;
+};
 
 function safeDateLabel(raw?: string | null): string {
   if (!raw) return "";
@@ -55,7 +67,6 @@ function safeDateLabel(raw?: string | null): string {
   });
 }
 
-
 export default function AccountScreen({ navigation }: any) {
   const { userToken } = useAuth();
   const { colors } = useThemeStyles();
@@ -67,7 +78,7 @@ export default function AccountScreen({ navigation }: any) {
     waypoints: false,
     comments: false,
   });
-  const [userRoutes, setUserRoutes] = useState<any[]>([]);
+  const [userRoutes, setUserRoutes] = useState<UserRoute[]>([]);
   const [userWaypoints, setUserWaypoints] = useState<any[]>([]);
   const [userComments, setUserComments] = useState<any[]>([]);
 
@@ -84,48 +95,44 @@ export default function AccountScreen({ navigation }: any) {
 
   // ---- Fetch profile + content (used on initial mount AND focus) ----
   const loadAccountData = useCallback(async () => {
-  if (!userToken) {
-    // If logged out, clear data and bail
-    setProfile(null);
-    setUserRoutes([]);
-    setUserWaypoints([]);
-    setUserComments([]);
-    return;
-  }
-
-  try {
-    const profileRes = await fetch(`${API_BASE}/api/users/me`, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    });
-
-    if (!profileRes.ok) {
-      console.warn("AccountScreen: profile request failed", profileRes.status);
-      // Optional: clear profile if 401 etc.
+    if (!userToken) {
+      // If logged out, clear data and bail
       setProfile(null);
+      setUserRoutes([]);
+      setUserWaypoints([]);
+      setUserComments([]);
       return;
     }
 
-    const profileJson = await profileRes.json();
-    setProfile({
-      ...profileJson.user,
-      stats: profileJson.stats,
-    });
+    try {
+      const profileRes = await fetch(`${API_BASE}/api/users/me`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
 
-    // These helpers already wrap fetch; just guard on .ok
-    const routesRes = await fetchUserRoutes(userToken);
-    if (routesRes.ok) setUserRoutes(routesRes.routes);
+      if (!profileRes.ok) {
+        console.warn("AccountScreen: profile request failed", profileRes.status);
+        setProfile(null);
+        return;
+      }
 
-    const waypointsRes = await fetchUserWaypoints(userToken);
-    if (waypointsRes.ok) setUserWaypoints(waypointsRes.waypoints);
+      const profileJson = await profileRes.json();
+      setProfile({
+        ...profileJson.user,
+        stats: profileJson.stats,
+      });
 
-    const commentsRes = await fetchUserComments(userToken);
-    if (commentsRes.ok) setUserComments(commentsRes.comments);
-  } catch (error) {
-    // Use warn so we don’t trigger the redbox
-    console.warn("AccountScreen: network error loading account data:", error);
-  }
-}, [userToken]);
+      const routesRes = await fetchUserRoutes(userToken);
+      if (routesRes.ok) setUserRoutes(routesRes.routes);
 
+      const waypointsRes = await fetchUserWaypoints(userToken);
+      if (waypointsRes.ok) setUserWaypoints(waypointsRes.waypoints);
+
+      const commentsRes = await fetchUserComments(userToken);
+      if (commentsRes.ok) setUserComments(commentsRes.comments);
+    } catch (error) {
+      console.warn("AccountScreen: network error loading account data:", error);
+    }
+  }, [userToken]);
 
   // Run when screen is focused (and on first mount)
   useFocusEffect(
@@ -173,8 +180,10 @@ export default function AccountScreen({ navigation }: any) {
       userWaypoints.filter((w) => {
         const text = `${w.name ?? ""} ${w.type ?? ""} ${w.description ?? ""}`;
         const when = w.created_at ?? w.create_time ?? w.createdAt ?? "";
-        return withinPreset(when, waypointsPreset) &&
-          textIncludes(text, waypointsQuery);
+        return (
+          withinPreset(when, waypointsPreset) &&
+          textIncludes(text, waypointsQuery)
+        );
       }),
     [userWaypoints, waypointsPreset, waypointsQuery]
   );
@@ -186,8 +195,10 @@ export default function AccountScreen({ navigation }: any) {
           c.route_name ?? ""
         }`;
         const when = c.create_time ?? c.created_at ?? c.createdAt ?? "";
-        return withinPreset(when, commentsPreset) &&
-          textIncludes(text, commentsQuery);
+        return (
+          withinPreset(when, commentsPreset) &&
+          textIncludes(text, commentsQuery)
+        );
       }),
     [userComments, commentsPreset, commentsQuery]
   );
@@ -219,7 +230,7 @@ export default function AccountScreen({ navigation }: any) {
     if (!id || !userToken) return;
     try {
       await deleteComment(id, userToken);
-      setUserComments((prev) => prev.filter((c) => c.id !== id)); // ✅ fix
+      setUserComments((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
       console.error("Failed to delete comment:", err);
       Alert.alert("Error", "Failed to delete comment.");
@@ -264,8 +275,21 @@ export default function AccountScreen({ navigation }: any) {
   };
 
   // ---- Edit handlers ----
-  const handleEditRoute = (id: number) =>
-    navigation.navigate("RouteEdit", { id });
+// keep the UserRoute type the same
+
+const handleEditRoute = (route: UserRoute) => {
+  navigation.navigate("Account", {
+    screen: "RouteEdit",          // nested inside the Account tab stack
+    params: {
+      id: route.id,
+      name: route.name,
+      region: route.region,
+      description: route.description,
+    },
+  });
+};
+
+
   const handleEditWaypoint = (id: number) =>
     navigation.navigate("WaypointEdit", { id });
 
@@ -294,8 +318,7 @@ export default function AccountScreen({ navigation }: any) {
       <Card title="Profile Statistics">
         <StatRow
           label="Member Since"
-value={profile ? safeDateLabel(profile.created_at) : "—"}
-
+          value={profile ? safeDateLabel(profile.created_at) : "—"}
         />
         <StatRow
           label="Routes Created"
@@ -338,11 +361,11 @@ value={profile ? safeDateLabel(profile.created_at) : "—"}
             <UserItemRow
               key={r.id}
               title={r.name}
-subtitle={`${r.region || "—"} • ${safeDateLabel(
-  r.created_at ?? r.create_time ?? r.createdAt ?? null
-)}`}
-
-              onEdit={() => handleEditRoute(r.id)}
+              subtitle={`${r.region || "—"} • ${safeDateLabel(
+                r.created_at ?? r.create_time ?? r.createdAt ?? null
+              )}`}
+              // 🔹 pass the *whole route* object here
+              onEdit={() => handleEditRoute(r)}
               onDelete={() => confirmDeleteRoute(r.id)}
             />
           ))
@@ -372,10 +395,9 @@ subtitle={`${r.region || "—"} • ${safeDateLabel(
             <UserItemRow
               key={w.id}
               title={w.name}
-subtitle={`${w.route_name} • ${w.type} • ${safeDateLabel(
-  w.created_at ?? w.create_time ?? w.createdAt ?? null
-)}`}
-
+              subtitle={`${w.route_name} • ${w.type} • ${safeDateLabel(
+                w.created_at ?? w.create_time ?? w.createdAt ?? null
+              )}`}
               onEdit={() => handleEditWaypoint(w.id)}
               onDelete={() => confirmDeleteWaypoint(w.id)}
             />
@@ -433,15 +455,14 @@ subtitle={`${w.route_name} • ${w.type} • ${safeDateLabel(
                     }}
                   />
                 ) : (
-<UserItemRow
-  title={c.waypoint_name || c.route_name || "Unknown"}
-  subtitle={`${safeDateLabel(
-    c.created_at ?? c.create_time ?? c.createdAt ?? null
-  )}${c.content ? ` • ${c.content}` : ""}`}
-  onEdit={() => setEditingCommentId(c.id)}
-  onDelete={() => confirmDeleteComment(c.id)}
-/>
-
+                  <UserItemRow
+                    title={c.waypoint_name || c.route_name || "Unknown"}
+                    subtitle={`${safeDateLabel(
+                      c.created_at ?? c.create_time ?? c.createdAt ?? null
+                    )}${c.content ? ` • ${c.content}` : ""}`}
+                    onEdit={() => setEditingCommentId(c.id)}
+                    onDelete={() => confirmDeleteComment(c.id)}
+                  />
                 )}
               </View>
             );
