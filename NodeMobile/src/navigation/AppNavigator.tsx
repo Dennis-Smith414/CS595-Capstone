@@ -78,7 +78,7 @@ function RoutesStack() {
    Main Tab Navigator
 ---------------------------- */
 function MainTabs() {
-  //const { colors: c } = useThemeStyles(); // ← ADD
+  //const { colors: c } = useThemeStyles();
 
   return (
     <Tab.Navigator
@@ -104,6 +104,7 @@ function MainTabs() {
         name="Map"
         component={MapStack}
         options={{
+            swipeEnabled: false, // to allow map to get first dibs on finger swipe
           tabBarIcon: ({ color }) => (
             <Image
               source={require("../assets/icons/MapLight.png")}
