@@ -74,7 +74,7 @@ export default function RouteSelectScreen({ navigation }: any) {
   }
 
   return (
-    <View style={[globalStyles.container, { padding: 16 }]}>
+    <View style={[globalStyles.container, { paddingTop: '5%', paddingBottom: 0, padding: 16 }]}>
       <Text style={globalStyles.headerText}>Select Routes</Text>
 
       {/* 🔎 Search input */}
