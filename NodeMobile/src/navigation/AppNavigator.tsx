@@ -2,7 +2,6 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-//import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import { Image, View, ActivityIndicator } from "react-native";
 import { useAuth } from "../context/AuthContext";
@@ -21,6 +20,7 @@ import RouteCreateScreen from "../screens/RouteCreateScreen";
 import WaypointCreateScreen from "../screens/WaypointCreateScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import WaypointEditScreen from "../screens/WaypointEditScreen";
+import RouteCommentsScreen from "../screens/RouteCommentScreen";
 
 // Navigators
 const Stack = createNativeStackNavigator();
@@ -70,6 +70,16 @@ function RoutesStack() {
         component={RouteCreateScreen}
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
+
+<RoutesStackNav.Screen
+  name="RouteComments"
+  component={RouteCommentsScreen}
+  options={({ route }: any) => ({
+    headerShown: true,
+    title: route?.params?.routeName ?? "Route Comments",
+  })}
+/>
+
     </RoutesStackNav.Navigator>
   );
 }
@@ -78,7 +88,6 @@ function RoutesStack() {
    Main Tab Navigator
 ---------------------------- */
 function MainTabs() {
-  //const { colors: c } = useThemeStyles();
 
   return (
     <Tab.Navigator
@@ -95,7 +104,12 @@ function MainTabs() {
           tabBarIcon: ({ color }) => (
             <Image
               source={require("../assets/icons/RouteSelectLight.png")}
-              style={{ width: 48, height: 48, resizeMode: "contain", tintColor: color }}
+              style={{
+                width: 48,
+                height: 48,
+                resizeMode: "contain",
+                tintColor: color,
+              }}
             />
           ),
         }}
@@ -108,7 +122,12 @@ function MainTabs() {
           tabBarIcon: ({ color }) => (
             <Image
               source={require("../assets/icons/MapLight.png")}
-              style={{ width: 48, height: 48, resizeMode: "contain", tintColor: color }}
+              style={{
+                width: 48,
+                height: 48,
+                resizeMode: "contain",
+                tintColor: color,
+              }}
             />
           ),
         }}
@@ -120,7 +139,12 @@ function MainTabs() {
           tabBarIcon: ({ color }) => (
             <Image
               source={require("../assets/icons/AccountLight.png")}
-              style={{ width: 48, height: 48, resizeMode: "contain", tintColor: color }}
+              style={{
+                width: 48,
+                height: 48,
+                resizeMode: "contain",
+                tintColor: color,
+              }}
             />
           ),
         }}
@@ -132,7 +156,12 @@ function MainTabs() {
           tabBarIcon: ({ color }) => (
             <Image
               source={require("../assets/icons/FilesLight.png")}
-              style={{ width: 44, height: 44, resizeMode: "contain", tintColor: color }}
+              style={{
+                width: 44,
+                height: 44,
+                resizeMode: "contain",
+                tintColor: color,
+              }}
             />
           ),
         }}
@@ -146,6 +175,7 @@ function MainTabs() {
 ---------------------------- */
 export default function AppNavigator() {
   const { userToken, isLoading } = useAuth();
+  const { navTheme } = useThemeStyles();
 
   if (isLoading) {
     return (
@@ -156,22 +186,22 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {userToken == null ? (
+        {userToken ? (
+          // Logged-in flow
+          <Stack.Screen name="MainTabs" component={MainTabs} />
+        ) : (
+          // Auth flow
           <>
             <Stack.Screen name="Landing" component={LandingScreen} />
-            <Stack.Screen name="CreateAccount" component={AccountCreationScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
-          </>
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen
-              name="WaypointEdit"
-              component={WaypointEditScreen}
-              options={{ title: "Edit Waypoint", headerShown: false }}
+              name="AccountCreation"
+              component={AccountCreationScreen}
             />
+            {/* once they log in, you can navigate to MainTabs */}
+            <Stack.Screen name="MainTabs" component={MainTabs} />
           </>
         )}
       </Stack.Navigator>
