@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, Pressable, Animated, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, Pressable, Animated, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useThemeStyles } from '../../styles/theme'; // Adjust path if needed
 import { Card } from './Card'; // Adjust path to your common Card
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -137,7 +137,7 @@ const TrailCard: React.FC<TrailCardProps> = ({
               <Text style={{ color: colors.accent, fontSize: 18 }}>▲</Text>
             </TouchableOpacity>
             <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: -2 }}>
-              {item.upvotes ?? 0}
+              {item.rating_total ?? item.upvotes ?? 0}
             </Text>
           </View>
         </View>

@@ -588,7 +588,7 @@ export default function RouteSelectScreen({ navigation }: any) {
           // Pass the functions we defined in the screen
           onSelect={() => toggleRoute({ id: item.id, name: item.name })}
           onFavorite={() => toggleFavorite(item.id)}
-          onUpvote={() => handleUpvote(item.id)}
+          onUpvote={() => handleVote(item.id, 1)}
           onCommentPress={() =>
             navigation.navigate("RouteComments", {
               routeId: item.id,

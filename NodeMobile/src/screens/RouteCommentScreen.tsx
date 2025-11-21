@@ -80,7 +80,7 @@ export default function RouteCommentsScreen({ route, navigation }: any) {
   }, [routeId, newComment]);
 
   return (
-    <View style={[globalStyles.container, { padding: 16 }]}>
+    <View style={[globalStyles.container, { padding: 16, paddingTop: '10%' }]}>
       <Text style={globalStyles.headerText}>{routeName}</Text>
 
       {/* Input box */}
