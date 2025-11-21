@@ -18,6 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouteSelection } from "../context/RouteSelectionContext";
 import { useGeolocation } from "../hooks/useGeolocation";
 import { useAuth } from "../context/AuthContext";
+import TrailCard from '../components/common/TrailCard';
 
 // NOTE: extended with optional start_lat / start_lng
 type RouteItem = {
@@ -500,152 +501,41 @@ export default function RouteSelectScreen({ navigation }: any) {
         <Text style={globalStyles.buttonText}>＋ Create / Upload Route</Text>
       </TouchableOpacity>
 
-      <FlatList
-        data={filteredRoutes}
-        keyExtractor={(item) => String(item.id)}
-        style={{ width: "100%", marginTop: 8 }}
-        refreshing={refreshing}
-        onRefresh={loadRoutes}
-        renderItem={({ item }) => {
-          const isSelected = selectedRouteIds.includes(item.id);
-          const isFavorite = favoriteIds.includes(item.id);
+    <FlatList
+      data={filteredRoutes}
+      keyExtractor={(item) => String(item.id)}
+      style={{ width: "100%", marginTop: 8 }}
+      refreshing={refreshing}
+      onRefresh={loadRoutes}
+      renderItem={({ item }) => (
+        <TrailCard
+          item={item}
+          isSelected={selectedRouteIds.includes(item.id)}
+          isFavorite={favoriteIds.includes(item.id)}
 
-          return (
-            <View
-              style={{
-                marginVertical: 6,
-                marginHorizontal: 16,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: colors.accent,
-                backgroundColor: isSelected
-                  ? colors.primary
-                  : colors.backgroundAlt,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                }}
-              >
-                <TouchableOpacity
-                  style={{ flex: 1, padding: 12 }}
-                  onPress={() =>
-                    toggleRoute({ id: item.id, name: item.name })
-                  }
-                >
-                  <Text
-                    style={[
-                      globalStyles.bodyText,
-                      {
-                        color: isSelected
-                          ? colors.background
-                          : colors.textPrimary,
-                      },
-                    ]}
-                  >
-                    {item.name}
-                  </Text>
-                  {item.region && (
-                    <Text
-                      style={[
-                        globalStyles.subText,
-                        {
-                          color: isSelected
-                            ? colors.background
-                            : colors.textSecondary,
-                          marginTop: 2,
-                        },
-                      ]}
-                    >
-                      {item.region}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                <View
-                  style={{
-                    paddingRight: 12,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <TouchableOpacity
-                    onPress={() => toggleFavorite(item.id)}
-                    style={{ paddingHorizontal: 4, paddingVertical: 2 }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 18,
-                        color: isFavorite
-                          ? colors.accent
-                          : colors.textSecondary,
-                      }}
-                    >
-                      {isFavorite ? "★" : "☆"}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => handleUpvote(item.id)}
-                    style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-                  >
-                    <Text style={{ color: colors.accent, fontSize: 18 }}>
-                      ▲
-                    </Text>
-                  </TouchableOpacity>
-                  <Text
-                    style={{
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      marginTop: -2,
-                    }}
-                  >
-                    {item.upvotes ?? 0}
-                  </Text>
-                </View>
-              </View>
-
-              <View
-                style={{
-                  paddingHorizontal: 12,
-                  paddingBottom: 8,
-                  paddingTop: 4,
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() =>
-                    navigation.navigate("RouteComments", {
-                      routeId: item.id,
-                      routeName: item.name,
-                    })
-                  }
-                >
-                  <Text
-                    style={{
-                      color: colors.accent,
-                      fontSize: 13,
-                    }}
-                  >
-                    View comments
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          <Text
-            style={[
-              globalStyles.subText,
-              { marginTop: 10, color: colors.textSecondary },
-            ]}
-          >
-            {routes.length ? "No matching routes." : "No routes found."}
-          </Text>
-        }
-      />
+          // Pass the functions we defined in the screen
+          onSelect={() => toggleRoute({ id: item.id, name: item.name })}
+          onFavorite={() => toggleFavorite(item.id)}
+          onUpvote={() => handleUpvote(item.id)}
+          onCommentPress={() =>
+            navigation.navigate("RouteComments", {
+              routeId: item.id,
+              routeName: item.name,
+            })
+          }
+        />
+      )}
+      ListEmptyComponent={
+        <Text
+          style={[
+            globalStyles.subText,
+            { marginTop: 10, color: colors.textSecondary },
+          ]}
+        >
+          {routes.length ? "No matching routes." : "No routes found."}
+        </Text>
+      }
+    />
     </View>
   );
 }
