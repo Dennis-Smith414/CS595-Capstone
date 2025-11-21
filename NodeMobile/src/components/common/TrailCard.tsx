@@ -2,14 +2,18 @@ import React, { useState, useRef } from 'react';
 import { View, Text, Pressable, Animated, StyleSheet, TouchableOpacity } from 'react-native';
 import { useThemeStyles } from '../../styles/theme'; // Adjust path if needed
 import { Card } from './Card'; // Adjust path to your common Card
+import Icon from 'react-native-vector-icons/Ionicons';
+
 
 interface TrailCardProps {
   item: any; // or RouteItem type
   isSelected: boolean;
   isFavorite: boolean;
+  isSyncing: boolean; // <--- NEW PROP
   onSelect: () => void;
   onFavorite: () => void;
   onUpvote: () => void;
+  onSync: () => void; // <--- NEW PROP
   onCommentPress: () => void;
 }
 
@@ -17,9 +21,11 @@ const TrailCard: React.FC<TrailCardProps> = ({
   item,
   isSelected,
   isFavorite,
+  isSyncing, // <--- Destructure new prop
   onSelect,
   onFavorite,
   onUpvote,
+  onSync,    // <--- Destructure new prop
   onCommentPress,
 }) => {
   const { colors } = useThemeStyles();
@@ -106,6 +112,19 @@ const TrailCard: React.FC<TrailCardProps> = ({
 
           {/* Right Side: Actions */}
           <View style={{ alignItems: "center", justifyContent: "center", paddingLeft: 12 }}>
+          {/* 1. Download / Sync Button (NEW) */}
+            <TouchableOpacity
+                onPress={onSync}
+                disabled={isSyncing}
+                style={{ padding: 4, marginBottom: 4 }}
+            >
+            {isSyncing ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                // Use "cloud-download-outline" or similar
+                <Icon name="cloud-download-outline" size={20} color={colors.textSecondary} />
+                )}
+            </TouchableOpacity>
             {/* Favorite Star */}
             <TouchableOpacity onPress={onFavorite} style={{ padding: 4 }}>
               <Text style={{ fontSize: 18, color: isFavorite ? colors.accent : colors.textSecondary }}>

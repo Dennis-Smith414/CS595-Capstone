@@ -512,6 +512,8 @@ export default function RouteSelectScreen({ navigation }: any) {
           item={item}
           isSelected={selectedRouteIds.includes(item.id)}
           isFavorite={favoriteIds.includes(item.id)}
+          isSyncing={syncingRouteId === item.id}
+          onSync={() => handleDownloadRoute(item.id, item.name)}
 
           // Pass the functions we defined in the screen
           onSelect={() => toggleRoute({ id: item.id, name: item.name })}
