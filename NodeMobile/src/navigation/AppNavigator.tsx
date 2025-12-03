@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import { Image, View, ActivityIndicator } from "react-native";
 import { useAuth } from "../context/AuthContext";
-import { useThemeStyles } from "../styles/theme"; // ← ADD
+import { useThemeStyles } from "../styles/theme";
 import { CustomTabBar } from "./CustomTabBar";
 
 // Screens

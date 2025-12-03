@@ -13,8 +13,7 @@ export function CustomTabBar({
   const { colors: c } = useThemeStyles();
 
   return (
-    // This is the main bar. We make it transparent.
-    <View style={[styles.container, { borderTopColor: c.border }]}>
+    <View style={[styles.container, { backgroundColor: c.backgroundAlt, borderTopColor: c.border, }]}>
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
