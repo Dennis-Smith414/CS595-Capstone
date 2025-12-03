@@ -13,32 +13,19 @@ import {
 
 import { useThemeStyles } from "../styles/theme";
 import { createGlobalStyles } from "../styles/globalStyles";
-import { useRouteSelection } from "../context/RouteSelectionContext";
+// import { useRouteSelection } from "../context/RouteSelectionContext"; // no longer used for card press
 import { syncRouteToOffline } from "../lib/bringOffline";
 import { useAuth } from "../context/AuthContext";
 import { useGeolocation } from "../hooks/useGeolocation";
 import { fetchRouteList } from "../lib/routes";
 import { submitRouteVote, fetchRouteRating } from "../lib/ratings";
+import RouteCard, { RouteCardItem } from "../components/routes/RouteCard";
 import {
   getFavorites,
   addToFavorites,
   removeFromFavorites,
 } from "../lib/favorites";
 import TrailCard from '../components/common/TrailCard';
-
-type RouteItem = {
-  id: number;
-  slug: string;
-  name: string;
-  region?: string;
-  upvotes?: number; // legacy field if your list still returns it
-  start_lat?: number | null;
-  start_lng?: number | null;
-
-  // rating fields (from ratings system)
-  rating_total?: number;
-  user_rating?: 1 | -1 | null;
-};
 
 const NEARBY_OPTIONS = [10, 25, 50, 75]; // miles
 
@@ -97,14 +84,14 @@ export default function RouteSelectScreen({ navigation }: any) {
     showErrorAlert: false,
   });
 
-  const [routes, setRoutes] = useState<RouteItem[]>([]);
+  const [routes, setRoutes] = useState<RouteCardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // 🔎 search
   const [query, setQuery] = useState("");
 
-  const { selectedRouteIds, toggleRoute } = useRouteSelection();
+  // const { selectedRouteIds, toggleRoute } = useRouteSelection(); // no longer used for card press
   const [syncingRouteId, setSyncingRouteId] = useState<number | null>(null);
 
   // ✅ route currently being voted on (avoid spam + double taps)
@@ -283,7 +270,7 @@ export default function RouteSelectScreen({ navigation }: any) {
   // Search + Nearby + Favorites filter
   const filteredRoutes = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let base: RouteItem[] = routes;
+    let base: RouteCardItem[] = routes;
 
     // Nearby filter – only if we have a location
     if (showNearbyOnly && currentLocation) {
@@ -571,43 +558,91 @@ export default function RouteSelectScreen({ navigation }: any) {
         <Text style={globalStyles.buttonText}>＋ Create / Upload Route</Text>
       </TouchableOpacity>
 
-    <FlatList
-      data={filteredRoutes}
-      keyExtractor={(item) => String(item.id)}
-      style={{ width: "100%", marginTop: 8 }}
-      refreshing={refreshing}
-      onRefresh={loadRoutes}
-      renderItem={({ item }) => (
-        <TrailCard
-          item={item}
-          isSelected={selectedRouteIds.includes(item.id)}
-          isFavorite={favoriteIds.includes(item.id)}
-          isSyncing={syncingRouteId === item.id}
-          onSync={() => handleDownloadRoute(item.id, item.name)}
+//     <FlatList
+//       data={filteredRoutes}
+//       keyExtractor={(item) => String(item.id)}
+//       style={{ width: "100%", marginTop: 8 }}
+//       refreshing={refreshing}
+//       onRefresh={loadRoutes}
+//       renderItem={({ item }) => (
+//         <TrailCard
+//           item={item}
+//           isSelected={selectedRouteIds.includes(item.id)}
+//           isFavorite={favoriteIds.includes(item.id)}
+//           isSyncing={syncingRouteId === item.id}
+//           onSync={() => handleDownloadRoute(item.id, item.name)}
+//
+//           // Pass the functions we defined in the screen
+//           onSelect={() => toggleRoute({ id: item.id, name: item.name })}
+//           onFavorite={() => toggleFavorite(item.id)}
+//           onUpvote={() => handleVote(item.id, 1)}
+//           onCommentPress={() =>
+//             navigation.navigate("RouteComments", {
+//               routeId: item.id,
+//               routeName: item.name,
+//             })
+//           }
+//         />
+//       )}
+//       ListEmptyComponent={
+//         <Text
+//           style={[
+//             globalStyles.subText,
+//             { marginTop: 10, color: colors.textSecondary },
+//           ]}
+//         >
+//           {routes.length ? "No matching routes." : "No routes found."}
+//         </Text>
+//       }
+     />
+      <FlatList
+        data={filteredRoutes}
+        keyExtractor={(item) => String(item.id)}
+        style={{ width: "100%", marginTop: 8 }}
+        refreshing={refreshing}
+        onRefresh={loadRoutes}
+        renderItem={({ item }) => {
+          const isFavorite = favoriteIds.includes(item.id);
+          const score = item.rating_total ?? item.upvotes ?? 0;
+          const isVoting = votingRouteId === item.id;
+          const isFavUpdating = updatingFavoriteId === item.id;
 
-          // Pass the functions we defined in the screen
-          onSelect={() => toggleRoute({ id: item.id, name: item.name })}
-          onFavorite={() => toggleFavorite(item.id)}
-          onUpvote={() => handleVote(item.id, 1)}
-          onCommentPress={() =>
-            navigation.navigate("RouteComments", {
-              routeId: item.id,
-              routeName: item.name,
-            })
-          }
-        />
-      )}
-      ListEmptyComponent={
-        <Text
-          style={[
-            globalStyles.subText,
-            { marginTop: 10, color: colors.textSecondary },
-          ]}
-        >
-          {routes.length ? "No matching routes." : "No routes found."}
-        </Text>
-      }
-    />
+          return (
+            <RouteCard
+              item={item}
+              isFavorite={isFavorite}
+              isFavUpdating={isFavUpdating}
+              isVoting={isVoting}
+              score={score}
+              onToggleFavorite={() => toggleFavorite(item.id)}
+              onVoteUp={() => handleVote(item.id, 1)}
+              onVoteDown={() => handleVote(item.id, -1)}
+              onOpenComments={() =>
+                navigation.navigate("RouteComments", {
+                  routeId: item.id,
+                  routeName: item.name,
+                })
+              }
+              onOpenDetail={() =>
+                navigation.navigate("RouteDetail", {
+                  routeId: item.id,
+                  routeName: item.name,
+                })
+              }
+            />
+          );
+        }}
+        ListEmptyComponent={
+          <Text
+            style={[
+              globalStyles.subText,
+              { marginTop: 10, color: colors.textSecondary },
+            ]}
+          >
+            {routes.length ? "No matching routes." : "No routes found."}
+          </Text>
+        }
+      />
     </View>
   );
 }

@@ -20,6 +20,7 @@ import RouteCreateScreen from "../screens/RouteCreateScreen";
 import WaypointCreateScreen from "../screens/WaypointCreateScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import WaypointEditScreen from "../screens/WaypointEditScreen";
+import RouteDetailScreen from "../screens/RouteDetailScreen";
 import RouteCommentScreen from "../screens/RouteCommentScreen";
 
 // Navigators
@@ -65,18 +66,20 @@ function RoutesStack() {
   return (
     <RoutesStackNav.Navigator screenOptions={{ headerShown: false }}>
       <RoutesStackNav.Screen name="RoutesMain" component={RouteSelectScreen} />
-
       <RoutesStackNav.Screen
         name="RouteCreate"
         component={RouteCreateScreen}
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
+      <RoutesStackNav.Screen
+        name="RouteDetail"
+        component={RouteDetailScreen}
+      />
 
       <RoutesStackNav.Screen
         name="RouteComments"
         component={RouteCommentScreen}
-        // Optional: Add this if you want it to slide up like a popup
-        // options={{ presentation: "modal" }}
+        options={{ presentation: "modal" }}
       />
 
     </RoutesStackNav.Navigator>
