@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  // 💡 ADDED: Pressable and Animated for double-tap/animation
   Pressable,
   Animated,
 } from "react-native";
@@ -36,7 +35,6 @@ type Props = {
   onToggleFavorite: () => void;
   onVoteUp: () => void;
   onVoteDown: () => void;
-  onOpenComments: () => void;
   onOpenDetail: () => void;
 };
 
@@ -49,7 +47,6 @@ export const RouteCard: React.FC<Props> = ({
   onToggleFavorite,
   onVoteUp,
   onVoteDown,
-  onOpenComments,
   onOpenDetail,
 }) => {
   const { colors } = useThemeStyles();
@@ -58,7 +55,6 @@ export const RouteCard: React.FC<Props> = ({
   const isUpvoted = item.user_rating === 1;
   const isDownvoted = item.user_rating === -1;
 
-  // 💡 START: Double Tap and Animation Logic from TrailCard.tsx
   const [showHeart, setShowHeart] = useState(false);
   const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
   const scaleValue = useRef(new Animated.Value(0)).current;
@@ -166,12 +162,12 @@ export const RouteCard: React.FC<Props> = ({
           )}
         </View>
 
-        {/* MIDDLE: tiny trail outline (from main branch) */}
+        {/* MIDDLE: tiny trail outline */}
         <View style={styles.thumbnailWrapper}>
           <RouteThumbnail routeId={item.id} width={70} height={40} />
         </View>
 
-        {/* RIGHT: favorites + votes (remains the same for explicit button taps) */}
+        {/* RIGHT: favorites + votes */}
         <View style={styles.rightColumn}>
           {/* Favorite toggle */}
           <TouchableOpacity
