@@ -558,43 +558,7 @@ export default function RouteSelectScreen({ navigation }: any) {
         <Text style={globalStyles.buttonText}>＋ Create / Upload Route</Text>
       </TouchableOpacity>
 
-//     <FlatList
-//       data={filteredRoutes}
-//       keyExtractor={(item) => String(item.id)}
-//       style={{ width: "100%", marginTop: 8 }}
-//       refreshing={refreshing}
-//       onRefresh={loadRoutes}
-//       renderItem={({ item }) => (
-//         <TrailCard
-//           item={item}
-//           isSelected={selectedRouteIds.includes(item.id)}
-//           isFavorite={favoriteIds.includes(item.id)}
-//           isSyncing={syncingRouteId === item.id}
-//           onSync={() => handleDownloadRoute(item.id, item.name)}
-//
-//           // Pass the functions we defined in the screen
-//           onSelect={() => toggleRoute({ id: item.id, name: item.name })}
-//           onFavorite={() => toggleFavorite(item.id)}
-//           onUpvote={() => handleVote(item.id, 1)}
-//           onCommentPress={() =>
-//             navigation.navigate("RouteComments", {
-//               routeId: item.id,
-//               routeName: item.name,
-//             })
-//           }
-//         />
-//       )}
-//       ListEmptyComponent={
-//         <Text
-//           style={[
-//             globalStyles.subText,
-//             { marginTop: 10, color: colors.textSecondary },
-//           ]}
-//         >
-//           {routes.length ? "No matching routes." : "No routes found."}
-//         </Text>
-//       }
-     />
+
       <FlatList
         data={filteredRoutes}
         keyExtractor={(item) => String(item.id)}
