@@ -212,6 +212,44 @@ export default function WebApp() {
   const toggleId = (id: number) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleUploadFile(file?: File | null) {
+    if (!file) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+
+      const res = await fetch(`${API}/api/routes/upload`, {
+        method: "POST",
+        headers: {
+          ...authHeader(),
+        },
+        body: fd,
+      });
+
+      const body = await res.json().catch(() => ({ ok: false }));
+      if (!res.ok || !body?.ok) {
+        setErr((body && (body.error || JSON.stringify(body))) || `Upload failed (${res.status})`);
+      } else {
+        // refresh list after success
+        try {
+          const list = await fetchRouteList();
+          setRoutes(list);
+        } catch {
+          // ignore
+        }
+        alert(`Upload succeeded — ${body.segments || 0} segment(s).`);
+      }
+    } catch (e: any) {
+      setErr(e?.message || "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div style={sx.app}>
       <div style={sx.header}>
@@ -300,8 +338,26 @@ function RoutesScreen({
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "flex", gap: 12 }}>
-        <button style={sx.primaryPill} onClick={() => alert("Upload Route (wire this to backend)")}>
-          + Create / Upload Route
+        <input
+          ref={fileRef}
+          style={{ display: "none" }}
+          type="file"
+          accept=".gpx,application/gpx+xml,text/xml"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            // clear input so same-file re-upload works
+            e.currentTarget.value = "";
+            if (f) handleUploadFile(f);
+          }}
+        />
+        <button
+          style={sx.primaryPill}
+          onClick={() => {
+            fileRef.current?.click?.();
+          }}
+          disabled={loading}
+        >
+          {loading ? "Uploading…" : "+ Create / Upload Route"}
         </button>
         <input
           placeholder="Search routes…"
