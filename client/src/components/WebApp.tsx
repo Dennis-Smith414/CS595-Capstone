@@ -150,7 +150,7 @@ const Icons = {
 const API =
   (import.meta as any)?.env?.VITE_API_BASE ||
   (window as any)?.__API_BASE__ ||
-  "http://localhost:5000";
+  "http://localhost:5100";
 
 const authHeader = (): Record<string, string> => {
   const t = localStorage.getItem("token");
