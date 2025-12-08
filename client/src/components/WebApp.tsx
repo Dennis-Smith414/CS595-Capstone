@@ -176,13 +176,14 @@ declare global {
 
 /* ============================ API CALLS ============================ */
 async function fetchRouteList(): Promise<RouteItem[]> {
-  const r = await fetch(`${API}/api/routes/list`, { headers: authHeader() });
+  // server exposes listing at /api/routes (with optional ?limit/offset/q)
+  const r = await fetch(`${API}/api/routes`, { headers: authHeader() });
   const txt = await r.text();
   try {
     const j = JSON.parse(txt);
     return Array.isArray(j?.items) ? j.items : [];
   } catch {
-    console.warn("Bad JSON from /api/routes/list:", txt);
+    console.warn("Bad JSON from /api/routes:", txt);
     return [];
   }
 }
@@ -211,44 +212,6 @@ export default function WebApp() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const toggleId = (id: number) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  async function handleUploadFile(file?: File | null) {
-    if (!file) return;
-    setLoading(true);
-    setErr("");
-    try {
-      const fd = new FormData();
-      fd.append("file", file, file.name);
-
-      const res = await fetch(`${API}/api/routes/upload`, {
-        method: "POST",
-        headers: {
-          ...authHeader(),
-        },
-        body: fd,
-      });
-
-      const body = await res.json().catch(() => ({ ok: false }));
-      if (!res.ok || !body?.ok) {
-        setErr((body && (body.error || JSON.stringify(body))) || `Upload failed (${res.status})`);
-      } else {
-        // refresh list after success
-        try {
-          const list = await fetchRouteList();
-          setRoutes(list);
-        } catch {
-          // ignore
-        }
-        alert(`Upload succeeded — ${body.segments || 0} segment(s).`);
-      }
-    } catch (e: any) {
-      setErr(e?.message || "Upload failed");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <div style={sx.app}>
@@ -334,6 +297,44 @@ function RoutesScreen({
         r.region?.toLowerCase().includes(s)
     );
   }, [routes, q]);
+
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleUploadFile(file?: File | null) {
+    if (!file) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+
+      const res = await fetch(`${API}/api/routes/upload`, {
+        method: "POST",
+        headers: {
+          ...authHeader(),
+        },
+        body: fd,
+      });
+
+      const body = await res.json().catch(() => ({ ok: false }));
+      if (!res.ok || !body?.ok) {
+        setErr((body && (body.error || JSON.stringify(body))) || `Upload failed (${res.status})`);
+      } else {
+        // refresh list after success
+        try {
+          const list = await fetchRouteList();
+          setRoutes(list);
+        } catch {
+          // ignore
+        }
+        alert(`Upload succeeded — ${body.segments || 0} segment(s).`);
+      }
+    } catch (e: any) {
+      setErr(e?.message || "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
