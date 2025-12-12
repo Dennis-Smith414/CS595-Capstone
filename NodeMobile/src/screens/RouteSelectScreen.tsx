@@ -25,6 +25,7 @@ import {
   addToFavorites,
   removeFromFavorites,
 } from "../lib/favorites";
+import TrailCard from '../components/common/TrailCard';
 
 const NEARBY_OPTIONS = [10, 25, 50, 75]; // miles
 
@@ -356,7 +357,7 @@ export default function RouteSelectScreen({ navigation }: any) {
   }
 
   return (
-    <View style={[globalStyles.container, { padding: 16 }]}>
+    <View style={[globalStyles.container, { paddingTop: '5%', paddingBottom: 0, padding: 16 }]}>
       <Text style={globalStyles.headerText}>Select Routes</Text>
 
       {/* Nearby + Favorites pills */}
@@ -556,6 +557,7 @@ export default function RouteSelectScreen({ navigation }: any) {
       >
         <Text style={globalStyles.buttonText}>＋ Create / Upload Route</Text>
       </TouchableOpacity>
+
 
       <FlatList
         data={filteredRoutes}

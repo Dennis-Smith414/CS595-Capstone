@@ -1,6 +1,13 @@
 // components/routes/RouteCard.tsx
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useState, useRef, useCallback } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Pressable,
+  Animated,
+} from "react-native";
 import { useThemeStyles } from "../../styles/theme";
 import { createGlobalStyles } from "../../styles/globalStyles";
 import RouteThumbnail from "./RouteThumbnail";
@@ -48,10 +55,74 @@ export const RouteCard: React.FC<Props> = ({
   const isUpvoted = item.user_rating === 1;
   const isDownvoted = item.user_rating === -1;
 
+  const [showHeart, setShowHeart] = useState(false);
+  const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
+  const scaleValue = useRef(new Animated.Value(0)).current;
+  const opacityValue = useRef(new Animated.Value(1)).current;
+
+  // Double Tap Logic Refs
+  const lastTap = useRef<number | null>(null);
+  const timer = useRef<NodeJS.Timeout | null>(null);
+  const DOUBLE_PRESS_DELAY = 300;
+
+  const triggerHeartAnimation = useCallback(() => {
+    setShowHeart(true);
+    scaleValue.setValue(0);
+    opacityValue.setValue(1);
+
+    Animated.sequence([
+      Animated.spring(scaleValue, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 5,
+      }),
+      Animated.delay(500),
+      Animated.timing(opacityValue, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowHeart(false));
+  }, [scaleValue, opacityValue]);
+
+  const handlePress = useCallback(
+    (event: any) => {
+      const now = Date.now();
+
+      if (lastTap.current && now - lastTap.current < DOUBLE_PRESS_DELAY) {
+        // --- DOUBLE TAP DETECTED ---
+        if (timer.current) clearTimeout(timer.current); // Cancel the single tap action
+
+        // 1. Get coordinates
+        const { locationX, locationY } = event.nativeEvent;
+        setTapPosition({ x: locationX, y: locationY });
+
+        // 2. Trigger Upvote
+        onVoteUp();
+
+        // 3. Trigger Animation
+        triggerHeartAnimation();
+
+        lastTap.current = null;
+      } else {
+        // --- SINGLE TAP DETECTED ---
+        lastTap.current = now;
+
+        // Delay the detail screen navigation to wait for a potential second tap
+        timer.current = setTimeout(() => {
+          onOpenDetail();
+          lastTap.current = null;
+        }, DOUBLE_PRESS_DELAY);
+      }
+    },
+    [onVoteUp, onOpenDetail, triggerHeartAnimation]
+  );
+  // 💡 END: Double Tap and Animation Logic
+
   return (
-    <TouchableOpacity
-      onPress={onOpenDetail}
-      activeOpacity={0.85}
+    // 💡 Changed outer View to Pressable to handle the tap logic
+    <Pressable
+      onPress={handlePress}
       style={[
         styles.cardContainer,
         {
@@ -61,7 +132,7 @@ export const RouteCard: React.FC<Props> = ({
       ]}
     >
       <View style={styles.headerRow}>
-        {/* LEFT: title / region – tap anywhere on card opens detail */}
+        {/* LEFT: title / region – NO onPress HERE, handled by outer Pressable */}
         <View style={styles.titleArea}>
           <Text
             style={[
@@ -161,7 +232,38 @@ export const RouteCard: React.FC<Props> = ({
           </Text>
         </View>
       </View>
-    </TouchableOpacity>
+
+      {/* 💡 Heart Animation Overlay */}
+      {showHeart && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: tapPosition.y - 40,
+            left: tapPosition.x - 40,
+            transform: [{ scale: scaleValue }],
+            opacity: opacityValue,
+            zIndex: 10,
+          }}
+        >
+          <Text style={{ fontSize: 80 }}>❤️</Text>
+        </Animated.View>
+      )}
+
+      {/* Footer: comments link */}
+      <View style={styles.footerRow}>
+        <TouchableOpacity onPress={onOpenComments}>
+          <Text
+            style={{
+              color: colors.accent,
+              fontSize: 13,
+            }}
+          >
+            View comments
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </Pressable>
   );
 };
 
@@ -199,6 +301,11 @@ const styles = StyleSheet.create({
   voteButtonWrapper: {
     paddingHorizontal: 8,
     paddingVertical: 2,
+  },
+  footerRow: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    paddingTop: 4,
   },
 });
 

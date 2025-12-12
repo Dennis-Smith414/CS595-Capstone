@@ -2,10 +2,11 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import { Image, View, ActivityIndicator } from "react-native";
 import { useAuth } from "../context/AuthContext";
-import { useThemeStyles } from "../styles/theme"; // ← ADD
+import { useThemeStyles } from "../styles/theme";
+import { CustomTabBar } from "./CustomTabBar";
 
 // Screens
 import AccountCreationScreen from "../screens/AccountCreationScreen";
@@ -20,9 +21,11 @@ import WaypointCreateScreen from "../screens/WaypointCreateScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import WaypointEditScreen from "../screens/WaypointEditScreen";
 import RouteDetailScreen from "../screens/RouteDetailScreen";
+import RouteCommentScreen from "../screens/RouteCommentScreen";
+
 // Navigators
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Tab = createMaterialTopTabNavigator();
 
 const AccountStackNav = createNativeStackNavigator();
 const MapStackNav = createNativeStackNavigator();
@@ -72,6 +75,13 @@ function RoutesStack() {
         name="RouteDetail"
         component={RouteDetailScreen}
       />
+
+      <RoutesStackNav.Screen
+        name="RouteComments"
+        component={RouteCommentScreen}
+        options={{ presentation: "modal" }}
+      />
+
     </RoutesStackNav.Navigator>
   );
 }
@@ -80,25 +90,14 @@ function RoutesStack() {
    Main Tab Navigator
 ---------------------------- */
 function MainTabs() {
-  const { colors: c } = useThemeStyles(); // ← ADD
 
   return (
     <Tab.Navigator
       initialRouteName="Account"
       backBehavior="history"
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: c.backgroundAlt,   // ← THEMED
-          borderTopWidth: 1,
-          borderTopColor: c.border,           // ← THEMED
-          height: 80,
-          paddingTop: 15,
-        },
-        tabBarShowLabel: false,
-        tabBarActiveTintColor: c.primary,     // ← THEMED
-        tabBarInactiveTintColor: c.textSecondary, // ← THEMED
-      }}
+      tabBarPosition="bottom"
+
+      tabBar={props => <CustomTabBar{...props} />}
     >
       <Tab.Screen
         name="Routes"
@@ -116,6 +115,7 @@ function MainTabs() {
         name="Map"
         component={MapStack}
         options={{
+            swipeEnabled: false, // to allow map to get first dibs on finger swipe
           tabBarIcon: ({ color }) => (
             <Image
               source={require("../assets/icons/MapLight.png")}
